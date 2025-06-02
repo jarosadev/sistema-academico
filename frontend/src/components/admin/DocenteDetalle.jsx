@@ -3,10 +3,11 @@ import { User, Mail, Phone, Briefcase, Calendar, BookOpen, Users, Award, Clock }
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Loading from '../ui/Loading';
-import Modal from '../ui/Modal';
+import Modal from '../ui/ModalImproved';
 import { dataService } from '../../services/dataService';
+import { notificationService } from '../../services/notificationService';
 
-const DocenteDetalle = ({ docente, onClose, onAsignarMateria }) => {
+const DocenteDetalle = ({ docente, onClose }) => {
   const [materias, setMaterias] = useState([]);
   const [estudiantes, setEstudiantes] = useState([]);
   const [cargaAcademica, setCargaAcademica] = useState([]);
@@ -50,13 +51,100 @@ const DocenteDetalle = ({ docente, onClose, onAsignarMateria }) => {
     }
   };
 
+  const [selectedParalelo, setSelectedParalelo] = useState('A');
+  const [asignacionExistente, setAsignacionExistente] = useState(null);
+
   const handleAsignarMateria = async (materiaId) => {
+    let loadingToast = null;
     try {
-      await onAsignarMateria(docente.id_docente, materiaId);
+      const currentYear = new Date().getFullYear();
+      
+      // Verificar si ya existe una asignación
+      const materiasActuales = await dataService.docentes.getMaterias(docente.id_docente);
+      const existente = materiasActuales.data.find(m => 
+        m.id_materia === materiaId && 
+        m.gestion === currentYear
+      );
+
+      if (existente) {
+        setAsignacionExistente({
+          materiaId,
+          nombre: existente.nombre,
+          paralelo: existente.paralelo,
+          gestion: existente.gestion
+        });
+        return;
+      }
+
+      loadingToast = notificationService.loading('Asignando materia...');
+      await dataService.docentes.asignarMateria(docente.id_docente, {
+        id_materia: materiaId,
+        gestion: currentYear,
+        paralelo: selectedParalelo
+      });
+      notificationService.success('Materia asignada exitosamente');
       setShowAsignarModal(false);
       cargarDatosAdicionales();
     } catch (error) {
-      console.error('Error al asignar materia:', error);
+      notificationService.error('Error al asignar materia: ' + error.message);
+    } finally {
+      if (loadingToast) notificationService.dismissToast(loadingToast);
+    }
+  };
+
+  const handleConfirmarCambioParalelo = async () => {
+    if (!asignacionExistente) return;
+
+    let loadingToast = null;
+    try {
+      loadingToast = notificationService.loading('Actualizando asignación...');
+      
+      // Primero removemos la asignación existente
+      await dataService.docentes.removerMateria(
+        docente.id_docente, 
+        asignacionExistente.materiaId, 
+        { 
+          gestion: asignacionExistente.gestion,
+          paralelo: asignacionExistente.paralelo 
+        }
+      );
+
+      // Luego creamos la nueva asignación
+      await dataService.docentes.asignarMateria(docente.id_docente, {
+        id_materia: asignacionExistente.materiaId,
+        gestion: asignacionExistente.gestion,
+        paralelo: selectedParalelo
+      });
+
+      notificationService.success('Paralelo actualizado exitosamente');
+      setAsignacionExistente(null);
+      setShowAsignarModal(false);
+      cargarDatosAdicionales();
+    } catch (error) {
+      notificationService.error('Error al actualizar paralelo: ' + error.message);
+    } finally {
+      if (loadingToast) notificationService.dismissToast(loadingToast);
+    }
+  };
+
+  const handleRemoverMateria = async (materiaId, gestion, paralelo = 'A') => {
+    const confirmed = await notificationService.confirm({
+      title: '¿Está seguro que desea remover esta materia?',
+      text: 'Esta acción no se puede deshacer'
+    });
+
+    if (confirmed) {
+      let loadingToast = null;
+      try {
+        loadingToast = notificationService.loading('Removiendo materia...');
+        await dataService.docentes.removerMateria(docente.id_docente, materiaId, { gestion, paralelo });
+        notificationService.success('Materia removida exitosamente');
+        cargarDatosAdicionales();
+      } catch (error) {
+        notificationService.error('Error al remover materia: ' + error.message);
+      } finally {
+        if (loadingToast) notificationService.dismissToast(loadingToast);
+      }
     }
   };
 
@@ -156,14 +244,14 @@ const DocenteDetalle = ({ docente, onClose, onAsignarMateria }) => {
 
       {/* Tabs */}
       <div className="border-b border-secondary-200">
-        <nav className="-mb-px flex space-x-8">
+        <nav className="-mb-px flex flex-wrap gap-4 p-1">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                className={`py-2 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-2 ${
                   activeTab === tab.id
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-secondary-500 hover:text-secondary-700 hover:border-secondary-300'
@@ -258,40 +346,58 @@ const DocenteDetalle = ({ docente, onClose, onAsignarMateria }) => {
                 <table className="min-w-full divide-y divide-secondary-200">
                   <thead className="bg-secondary-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
                         Materia
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
                         Sigla
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
+                      <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
                         Semestre
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
+                      <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
                         Mención
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
                         Gestión
+                      </th>
+                      <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
+                        Paralelo
+                      </th>
+                      <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-secondary-500 uppercase tracking-wider">
+                        Acciones
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-secondary-200">
                     {materias.map((materia) => (
                       <tr key={materia.id_materia}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-secondary-900">
-                          {materia.materia_nombre}
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-secondary-900">
+                          {materia.nombre}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-500">
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-secondary-500">
                           {materia.sigla}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-500">
+                        <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-secondary-500">
                           {materia.semestre}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-500">
+                        <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-secondary-500">
                           {materia.mencion_nombre}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-500">
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-secondary-500">
                           {materia.gestion}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-secondary-500">
+                          {materia.paralelo}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => handleRemoverMateria(materia.id_materia, materia.gestion, materia.paralelo)}
+                          >
+                            Remover
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -362,45 +468,113 @@ const DocenteDetalle = ({ docente, onClose, onAsignarMateria }) => {
       {/* Modal para asignar materia */}
       <Modal
         isOpen={showAsignarModal}
-        onClose={() => setShowAsignarModal(false)}
+        onClose={() => {
+          setShowAsignarModal(false);
+          setAsignacionExistente(null);
+          setSelectedParalelo('A');
+        }}
         title="Asignar Materia"
+        size="lg"
       >
         <div className="space-y-4">
-          <p className="text-secondary-600">
-            Seleccione una materia para asignar al docente {docente.nombre} {docente.apellido}:
-          </p>
-          
-          {materiasDisponibles.length > 0 ? (
-            <div className="max-h-60 overflow-y-auto space-y-2">
-              {materiasDisponibles.map((materia) => (
-                <div
-                  key={materia.id_materia}
-                  className="p-3 border border-secondary-200 rounded-lg hover:bg-secondary-50 cursor-pointer"
-                  onClick={() => handleAsignarMateria(materia.id_materia)}
+          {asignacionExistente ? (
+            <div className="space-y-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-yellow-800">
+                  La materia <span className="font-medium">{asignacionExistente.nombre}</span> ya está asignada 
+                  al paralelo <span className="font-medium">{asignacionExistente.paralelo}</span> en la 
+                  gestión <span className="font-medium">{asignacionExistente.gestion}</span>.
+                </p>
+                <p className="mt-2 text-yellow-700">
+                  ¿Desea cambiar al paralelo {selectedParalelo}?
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <label className="text-sm font-medium text-secondary-700">
+                  Nuevo Paralelo:
+                </label>
+                <select
+                  value={selectedParalelo}
+                  onChange={(e) => setSelectedParalelo(e.target.value)}
+                  className="mt-1 block w-24 pl-3 pr-10 py-2 text-base border-secondary-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md"
                 >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-medium text-secondary-900">{materia.nombre}</p>
-                      <p className="text-sm text-secondary-600">
-                        {materia.sigla} - Semestre {materia.semestre}
-                      </p>
-                    </div>
-                    <Button size="sm">Asignar</Button>
-                  </div>
-                </div>
-              ))}
+                  {['A', 'B', 'C', 'D', 'E'].map(p => (
+                    <option key={p} value={p}>Paralelo {p}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setAsignacionExistente(null);
+                    setSelectedParalelo('A');
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button onClick={handleConfirmarCambioParalelo}>
+                  Confirmar Cambio
+                </Button>
+              </div>
             </div>
           ) : (
-            <p className="text-secondary-500 text-center py-4">
-              No hay materias disponibles para asignar
-            </p>
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-secondary-600">
+                  Seleccione una materia para asignar al docente {docente.nombre} {docente.apellido}:
+                </p>
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-secondary-700">
+                    Paralelo:
+                  </label>
+                  <select
+                    value={selectedParalelo}
+                    onChange={(e) => setSelectedParalelo(e.target.value)}
+                    className="mt-1 block w-24 pl-3 pr-10 py-2 text-base border-secondary-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md"
+                  >
+                    {['A', 'B', 'C', 'D', 'E'].map(p => (
+                      <option key={p} value={p}>Paralelo {p}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              {materiasDisponibles.length > 0 ? (
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {materiasDisponibles.map((materia) => (
+                    <div
+                      key={materia.id_materia}
+                      className="p-3 border border-secondary-200 rounded-lg hover:bg-secondary-50 cursor-pointer"
+                      onClick={() => handleAsignarMateria(materia.id_materia)}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="font-medium text-secondary-900">{materia.nombre}</p>
+                          <p className="text-sm text-secondary-600">
+                            {materia.sigla} - Semestre {materia.semestre}
+                          </p>
+                        </div>
+                        <Button size="sm">Asignar</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-secondary-500 text-center py-4">
+                  No hay materias disponibles para asignar
+                </p>
+              )}
+              
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <Button variant="secondary" onClick={() => setShowAsignarModal(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </>
           )}
-          
-          <div className="flex justify-end space-x-3 pt-4 border-t">
-            <Button variant="secondary" onClick={() => setShowAsignarModal(false)}>
-              Cancelar
-            </Button>
-          </div>
         </div>
       </Modal>
 

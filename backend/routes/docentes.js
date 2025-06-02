@@ -102,7 +102,7 @@ router.post('/:id/materias',
  */
 router.delete('/:id/materias/:id_materia', 
     requireRole(['administrador']), 
-    docenteController.desasignarMateria || ((req, res) => {
+    docenteController.removerMateria || ((req, res) => {
         res.json({ success: false, message: 'Función no implementada' });
     })
 );

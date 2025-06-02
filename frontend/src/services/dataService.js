@@ -57,7 +57,7 @@ export const dataService = {
     
     // Gestión de materias
     asignarMateria: (id, datosMateria) => api.post(`/docentes/${id}/materias`, datosMateria),
-    desasignarMateria: (id, idMateria) => api.delete(`/docentes/${id}/materias/${idMateria}`),
+    removerMateria: (id, idMateria, params) => api.delete(`/docentes/${id}/materias/${idMateria}`, { params }),
     asignacionMasiva: (datos) => api.post('/docentes/asignacion-masiva', datos),
     
     // Métodos de compatibilidad
@@ -69,7 +69,8 @@ export const dataService = {
     getEstadisticas: () => api.get('/docentes/estadisticas'),
     getMaterias: (id) => api.get(`/docentes/${id}/materias`),
     getEstudiantes: (id) => api.get(`/docentes/${id}/estudiantes`),
-    getCargaAcademica: (id) => api.get(`/docentes/${id}/carga-academica`)
+    getCargaAcademica: (id) => api.get(`/docentes/${id}/carga-academica`),
+    removeMateria: (id, materiaId, params) => api.delete(`/docentes/${id}/materias/${materiaId}`, { params })
   },
 
   // Gestión de Materias
@@ -209,10 +210,33 @@ export const dataService = {
     getAll: () => api.get('/reportes')
   },
 
+  // Gestión de Tipos de Evaluación
+  tiposEvaluacion: {
+    // Operaciones CRUD básicas
+    obtenerTodos: (idMateria, parametros = {}) => api.get(`/tipos-evaluacion/materia/${idMateria}`, { params: parametros }),
+    obtenerPorId: (idMateria, idTipoEvaluacion) => api.get(`/tipos-evaluacion/materia/${idMateria}/${idTipoEvaluacion}`),
+    crear: (idMateria, datos) => api.post(`/tipos-evaluacion/materia/${idMateria}`, datos),
+    actualizar: (idMateria, idTipoEvaluacion, datos) => api.put(`/tipos-evaluacion/materia/${idMateria}/${idTipoEvaluacion}`, datos),
+    eliminar: (idMateria, idTipoEvaluacion) => api.delete(`/tipos-evaluacion/materia/${idMateria}/${idTipoEvaluacion}`),
+    
+    // Operaciones específicas
+    obtenerEstadisticas: (idMateria) => api.get(`/tipos-evaluacion/materia/${idMateria}/estadisticas`),
+    validarPorcentajes: (idMateria) => api.get(`/tipos-evaluacion/materia/${idMateria}/validar-porcentajes`),
+    
+    // Métodos de compatibilidad
+    getAll: (materiaId, params = {}) => api.get(`/tipos-evaluacion/materia/${materiaId}`, { params }),
+    getById: (materiaId, tipoEvaluacionId) => api.get(`/tipos-evaluacion/materia/${materiaId}/${tipoEvaluacionId}`),
+    create: (materiaId, data) => api.post(`/tipos-evaluacion/materia/${materiaId}`, data),
+    update: (materiaId, tipoEvaluacionId, data) => api.put(`/tipos-evaluacion/materia/${materiaId}/${tipoEvaluacionId}`, data),
+    delete: (materiaId, tipoEvaluacionId) => api.delete(`/tipos-evaluacion/materia/${materiaId}/${tipoEvaluacionId}`),
+    getEstadisticas: (materiaId) => api.get(`/tipos-evaluacion/materia/${materiaId}/estadisticas`),
+    validatePercentages: (materiaId) => api.get(`/tipos-evaluacion/materia/${materiaId}/validar-porcentajes`)
+  },
+
   // Sistema de Auditoría
   auditoria: {
     // Operaciones básicas
-    obtenerLogs: (parametros = {}) => api.get('/auditoria', { params: parametros }),
+    obtenerLogs: (parametros = {}) => api.get('/auditoria/logs', { params: parametros }),
     obtenerEstadisticas: (parametros = {}) => api.get('/auditoria/estadisticas', { params: parametros }),
     limpiarLogs: (dias) => api.post('/auditoria/limpiar', { dias }),
     exportarLogs: (parametros = {}) => api.get('/auditoria/exportar', { params: parametros, responseType: 'blob' }),
@@ -233,5 +257,6 @@ export const {
   inscripciones,
   notas,
   reportes,
-  auditoria
+  auditoria,
+  tiposEvaluacion
 } = dataService;

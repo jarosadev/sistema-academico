@@ -29,13 +29,36 @@ async function auditAction(req, tabla, accion, id_registro = null, valores_anter
         `;
 
 
+        // Filtrar datos sensibles de los valores
+        const filterSensitiveData = (data) => {
+            if (!data) return null;
+            const filtered = { ...data };
+            const sensitiveFields = [
+                'token', 
+                'access_token', 
+                'refresh_token', 
+                'ultimo_acceso', 
+                'password',
+                'contrasena',
+                'clave',
+                'session_token',
+                'jwt',
+                'api_key',
+                'secret',
+                'cookie',
+                'authorization'
+            ];
+            sensitiveFields.forEach(field => delete filtered[field]);
+            return filtered;
+        };
+
         const params = [
             id_usuario,
             tabla,
             accion,
             id_registro,
-            valores_anteriores ? JSON.stringify(valores_anteriores) : null,
-            valores_nuevos ? JSON.stringify(valores_nuevos) : null,
+            valores_anteriores ? JSON.stringify(filterSensitiveData(valores_anteriores)) : null,
+            valores_nuevos ? JSON.stringify(filterSensitiveData(valores_nuevos)) : null,
             ip_address,
             user_agent
         ];
@@ -108,14 +131,28 @@ function auditMiddleware(req, res, next) {
             const urlParts = req.originalUrl.split('/');
             const tabla = urlParts[2] || 'unknown'; // Asumiendo /api/tabla/...
 
+            // Filtrar datos sensibles antes de auditar
+            const bodyToLog = req.body ? { ...req.body } : {};
+            delete bodyToLog.token;
+            delete bodyToLog.access_token;
+            delete bodyToLog.refresh_token;
+            delete bodyToLog.ultimo_acceso;
+            delete bodyToLog.password;
+
             // Auditar la acción (sin await para no bloquear la respuesta)
-            auditAction(req, tabla, accion, null, null, {
-                url: req.originalUrl,
-                method: req.method,
-                body: req.body
-            }).catch(err => {
-                console.error('Error en auditoría automática:', err);
-            });
+            // No auditar operaciones sensibles
+            const tablasExcluidas = ['usuarios', 'sesiones', 'tokens'];
+            const accionesSensibles = ['UPDATE', 'SELECT'];
+            
+            if (!tablasExcluidas.includes(tabla) || !accionesSensibles.includes(accion)) {
+                auditAction(req, tabla, accion, null, null, {
+                    url: req.originalUrl,
+                    method: req.method,
+                    body: bodyToLog
+                }).catch(err => {
+                    console.error('Error en auditoría automática:', err);
+                });
+            }
         }
 
         // Llamar al método original
@@ -175,12 +212,42 @@ async function obtenerLogsAuditoria(filtros = {}) {
 
         const whereClause = whereConditions.join(' AND ');
 
-        // Consulta principal (simplificada sin JOINs complejos)
+        // Consulta principal con información de usuario y roles
         const query = `
             SELECT 
-                a.*
+                a.*,
+                u.correo as usuario_correo,
+                CASE 
+                    WHEN e.id_estudiante IS NOT NULL THEN CONCAT(e.nombre, ' ', e.apellido)
+                    WHEN d.id_docente IS NOT NULL THEN CONCAT(d.nombre, ' ', d.apellido)
+                    ELSE u.correo
+                END as usuario_nombre,
+                GROUP_CONCAT(DISTINCT r.nombre) as roles
             FROM auditoria a
+            LEFT JOIN usuarios u ON a.id_usuario = u.id_usuario
+            LEFT JOIN estudiantes e ON u.id_usuario = e.id_usuario
+            LEFT JOIN docentes d ON u.id_usuario = d.id_usuario
+            LEFT JOIN usuario_roles ur ON u.id_usuario = ur.id_usuario
+            LEFT JOIN roles r ON ur.id_rol = r.id_rol
             WHERE ${whereClause}
+            GROUP BY 
+                a.id_auditoria, 
+                a.id_usuario,
+                a.tabla_afectada,
+                a.accion,
+                a.id_registro,
+                a.valores_anteriores,
+                a.valores_nuevos,
+                a.ip_address,
+                a.user_agent,
+                a.fecha_accion,
+                u.correo,
+                e.id_estudiante,
+                e.nombre,
+                e.apellido,
+                d.id_docente,
+                d.nombre,
+                d.apellido
             ORDER BY a.fecha_accion DESC
             LIMIT ${limitNum} OFFSET ${offset}
         `;
@@ -206,8 +273,8 @@ async function obtenerLogsAuditoria(filtros = {}) {
             success: true,
             data: logs.map(log => ({
                 ...log,
-                valores_anteriores: log.valores_anteriores ? JSON.parse(log.valores_anteriores) : null,
-                valores_nuevos: log.valores_nuevos ? JSON.parse(log.valores_nuevos) : null
+                valores_anteriores: log.valores_anteriores ? (typeof log.valores_anteriores === 'string' ? JSON.parse(log.valores_anteriores) : log.valores_anteriores) : null,
+                valores_nuevos: log.valores_nuevos ? (typeof log.valores_nuevos === 'string' ? JSON.parse(log.valores_nuevos) : log.valores_nuevos) : null
             })),
             pagination: {
                 page: parseInt(page),
@@ -287,12 +354,24 @@ async function obtenerEstadisticasAuditoria(filtros = {}) {
             executeQuery(actividadQuery, queryParams)
         ]);
 
+        // Calcular estadísticas
+        const total_registros = acciones.reduce((sum, item) => sum + item.cantidad, 0);
+        const acciones_hoy = actividad[0]?.cantidad || 0;
+        const usuarios_unicos = new Set((await executeQuery('SELECT DISTINCT id_usuario FROM auditoria')).map(row => row.id_usuario)).size;
+        const tablas_afectadas = tablas.length;
+
         return {
             success: true,
             data: {
-                por_accion: acciones,
-                por_tabla: tablas,
-                actividad_diaria: actividad
+                total_registros,
+                acciones_hoy,
+                usuarios_unicos,
+                tablas_afectadas,
+                detalles: {
+                    por_accion: acciones,
+                    por_tabla: tablas,
+                    actividad_diaria: actividad
+                }
             }
         };
 

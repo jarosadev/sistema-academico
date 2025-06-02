@@ -11,6 +11,7 @@ const inscripcionRoutes = require('./inscripciones');
 const notaRoutes = require('./notas');
 const reporteRoutes = require('./reportes');
 const auditoriaRoutes = require('./auditoria-fixed');
+const tiposEvaluacionRoutes = require('./tiposEvaluacion');
 
 // Middleware para logging de rutas en desarrollo
 if (process.env.NODE_ENV === 'development') {
@@ -37,9 +38,10 @@ router.get('/', (req, res) => {
             notas: '/api/notas',
             historial: '/api/historial',
             reportes: '/api/reportes',
-            auditoria: '/api/auditoria'
+            auditoria: '/api/auditoria',
+            tiposEvaluacion: '/api/tipos-evaluacion',
+            health: '/api/health'
         },
-        documentation: '/api/docs',
         health: '/health',
         timestamp: new Date().toISOString()
     });
@@ -55,6 +57,7 @@ router.use('/inscripciones', inscripcionRoutes);
 router.use('/notas', notaRoutes);
 router.use('/reportes', reporteRoutes);
 router.use('/auditoria', auditoriaRoutes);
+router.use('/tipos-evaluacion', tiposEvaluacionRoutes);
 
 // Ruta para estadísticas generales de la API
 router.get('/stats', (req, res) => {
@@ -85,7 +88,8 @@ router.use('*', (req, res) => {
             '/api/notas',
             '/api/historial',
             '/api/reportes',
-            '/api/auditoria'
+            '/api/auditoria',
+            '/api/tipos-evaluacion'
         ],
         timestamp: new Date().toISOString()
     });

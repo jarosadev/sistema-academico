@@ -185,11 +185,101 @@ const getLogsPorTabla = async (req, res) => {
     }
 };
 
+/**
+ * Exportar logs en formato CSV
+ */
+const exportarLogs = async (req, res) => {
+    try {
+        const filtros = {
+            id_usuario: req.query.id_usuario,
+            tabla: req.query.tabla,
+            accion: req.query.accion,
+            fecha_inicio: req.query.fecha_inicio,
+            fecha_fin: req.query.fecha_fin,
+            limit: 10000 // Límite alto para exportación
+        };
+
+        const resultado = await obtenerLogsAuditoria(filtros);
+        
+        // Función para escapar valores CSV
+        const escapeCsvValue = (value) => {
+            if (value === null || value === undefined) return '';
+            const stringValue = String(value);
+            if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+                return `"${stringValue.replace(/"/g, '""')}"`;
+            }
+            return stringValue;
+        };
+
+        // Función para formatear objetos JSON
+        const formatJsonValue = (value) => {
+            if (!value) return '';
+            try {
+                const objString = typeof value === 'string' ? value : JSON.stringify(value);
+                return objString.replace(/"/g, '""').replace(/\n/g, ' ');
+            } catch (e) {
+                return '';
+            }
+        };
+
+        // Convertir a CSV
+        const logs = resultado.data;
+        const csvRows = [];
+        
+        // Headers
+        csvRows.push([
+            'Fecha',
+            'Usuario',
+            'Acción',
+            'Tabla',
+            'ID Registro',
+            'Valores Anteriores',
+            'Valores Nuevos',
+            'IP',
+            'User Agent'
+        ].map(escapeCsvValue).join(','));
+        
+        // Data
+        logs.forEach(log => {
+            csvRows.push([
+                new Date(log.fecha_accion).toLocaleString(),
+                log.usuario_nombre || 'Sistema',
+                log.accion,
+                log.tabla_afectada,
+                log.id_registro || '',
+                formatJsonValue(log.valores_anteriores),
+                formatJsonValue(log.valores_nuevos),
+                log.ip_address,
+                log.user_agent
+            ].map(escapeCsvValue).join(','));
+        });
+
+        const csvContent = csvRows.join('\r\n');
+        
+        // Configurar headers para descarga con codificación UTF-8
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=auditoria_${new Date().toISOString().split('T')[0]}.csv`);
+        
+        // Agregar BOM para Excel y enviar
+        const BOM = '\uFEFF';
+        res.send(BOM + csvContent);
+
+    } catch (error) {
+        console.error('Error exportando logs:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error exportando logs',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
 module.exports = {
     getLogs,
     getEstadisticas,
     limpiarLogs,
     getActividadReciente,
     getLogsPorUsuario,
-    getLogsPorTabla
+    getLogsPorTabla,
+    exportarLogs
 };

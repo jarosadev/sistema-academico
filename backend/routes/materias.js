@@ -78,9 +78,7 @@ router.delete('/:id',
  */
 router.get('/mencion/:id_mencion', 
     requireRole(['administrador', 'docente', 'estudiante']), 
-    materiaController.obtenerMateriasPorMencion || ((req, res) => {
-        res.json({ success: false, message: 'Función no implementada' });
-    })
+    materiaController.obtenerMateriasPorMencion
 );
 
 /**
@@ -90,9 +88,27 @@ router.get('/mencion/:id_mencion',
  */
 router.get('/:id/prerequisitos', 
     requireRole(['administrador', 'docente', 'estudiante']), 
-    materiaController.obtenerPrerequisitos || ((req, res) => {
-        res.json({ success: false, message: 'Función no implementada' });
-    })
+    materiaController.obtenerPrerequisitos
+);
+
+/**
+ * @route GET /api/materias/:id/docentes
+ * @desc Obtener docentes asignados a una materia
+ * @access Administrador, Docente, Estudiante
+ */
+router.get('/:id/docentes',
+    requireRole(['administrador', 'docente', 'estudiante']),
+    materiaController.obtenerDocentesMateria
+);
+
+/**
+ * @route GET /api/materias/:id/inscripciones
+ * @desc Obtener inscripciones de una materia
+ * @access Administrador, Docente
+ */
+router.get('/:id/inscripciones',
+    requireRole(['administrador', 'docente']),
+    materiaController.obtenerInscripcionesMateria
 );
 
 module.exports = router;

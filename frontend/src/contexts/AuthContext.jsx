@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { authService } from '../services/authService';
+import { toast } from 'sonner';
 
 const AuthContext = createContext();
 
@@ -90,13 +91,19 @@ export const AuthProvider = ({ children }) => {
                 token: token
               }
             });
+            // toast.success('Sesión iniciada correctamente');
           } else {
             localStorage.removeItem('token');
             dispatch({ type: 'LOGOUT' });
+            toast.error('Sesión expirada. Por favor, inicie sesión nuevamente.', { 
+              duration: 8000, 
+              action: <button>Cerrar</button> 
+            });
           }
         } catch (error) {
           localStorage.removeItem('token');
           dispatch({ type: 'LOGOUT' });
+          toast.error('Sesión expirada. Por favor, inicie sesión nuevamente.');
         }
       } else {
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -114,9 +121,11 @@ export const AuthProvider = ({ children }) => {
           const response = await authService.verifyToken();
           if (!response.success) {
             logout();
+            toast.error('Sesión expirada. Por favor, inicie sesión nuevamente.');
           }
         } catch (error) {
           logout();
+          toast.error('Sesión expirada. Por favor, inicie sesión nuevamente.');
         }
       }, 5 * 60 * 1000); // Verificar cada 5 minutos
 
@@ -138,12 +147,14 @@ export const AuthProvider = ({ children }) => {
             token: tokens.access_token
           }
         });
+        toast.success('Inicio de sesión exitoso');
         return { success: true };
       } else {
         dispatch({
           type: 'LOGIN_FAILURE',
           payload: response.message || 'Error al iniciar sesión'
         });
+        toast.error(response.message || 'Error al iniciar sesión');
         return { success: false, message: response.message };
       }
     } catch (error) {
@@ -152,6 +163,7 @@ export const AuthProvider = ({ children }) => {
         type: 'LOGIN_FAILURE',
         payload: errorMessage
       });
+      toast.error(errorMessage);
       return { success: false, message: errorMessage };
     }
   };
@@ -163,11 +175,13 @@ export const AuthProvider = ({ children }) => {
       dispatch({ type: 'SET_LOADING', payload: false });
       return response;
     } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Error al registrar usuario';
       dispatch({
         type: 'SET_ERROR',
-        payload: error.response?.data?.message || 'Error al registrar usuario'
+        payload: errorMessage
       });
-      return { success: false, message: error.response?.data?.message };
+      toast.error(errorMessage);
+      return { success: false, message: errorMessage };
     }
   };
 
@@ -179,6 +193,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       localStorage.removeItem('token');
       dispatch({ type: 'LOGOUT' });
+      toast('Sesión cerrada correctamente');
     }
   };
 

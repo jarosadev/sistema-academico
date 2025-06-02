@@ -150,19 +150,24 @@ class MateriaController {
 
             // Obtener estadísticas de inscripciones
             const estadisticasQuery = `
+                WITH RECURSIVE years AS (
+                    SELECT YEAR(CURDATE()) as year
+                    UNION ALL
+                    SELECT year - 1 FROM years WHERE year > YEAR(CURDATE()) - 5
+                )
                 SELECT 
-                    i.gestion,
-                    COUNT(*) as total_inscritos,
-                    COUNT(CASE WHEN i.estado = 'aprobado' THEN 1 END) as aprobados,
-                    COUNT(CASE WHEN i.estado = 'reprobado' THEN 1 END) as reprobados,
-                    COUNT(CASE WHEN i.estado = 'abandonado' THEN 1 END) as abandonados,
-                    AVG(CASE WHEN n.tipo_evaluacion = 'final' THEN n.calificacion END) as promedio_final
-                FROM inscripciones i
+                    y.year as gestion,
+                    COALESCE(COUNT(i.id_inscripcion), 0) as total_inscritos,
+                    COALESCE(COUNT(CASE WHEN i.estado = 'aprobado' THEN 1 END), 0) as aprobados,
+                    COALESCE(COUNT(CASE WHEN i.estado = 'reprobado' THEN 1 END), 0) as reprobados,
+                    COALESCE(COUNT(CASE WHEN i.estado = 'abandonado' THEN 1 END), 0) as abandonados,
+                    COALESCE(AVG(CASE WHEN te.nombre = 'Examen Final' THEN n.calificacion END), 0) as promedio_final
+                FROM years y
+                LEFT JOIN inscripciones i ON i.id_materia = ? AND i.gestion = y.year
                 LEFT JOIN notas n ON i.id_inscripcion = n.id_inscripcion
-                WHERE i.id_materia = ?
-                GROUP BY i.gestion
-                ORDER BY i.gestion DESC
-                LIMIT 5
+                LEFT JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
+                GROUP BY y.year
+                ORDER BY y.year DESC
             `;
 
             const [docentes, estadisticas] = await Promise.all([
@@ -529,35 +534,49 @@ module.exports = {
     actualizarMateria: controller.actualizarMateria.bind(controller),
     eliminarMateria: controller.eliminarMateria.bind(controller),
     obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
-    // Funciones adicionales que pueden faltar
-    obtenerMateriasPorMencion: async (req, res, next) => {
+    obtenerMateriasPorMencion: controller.obtenerMateriasPorMencion.bind(controller),
+    obtenerPrerequisitos: controller.obtenerPrerequisitos.bind(controller),
+    obtenerDocentesMateria: async (req, res, next) => {
         try {
-            const { id_mencion } = req.params;
+            const { id } = req.params;
             const query = `
-                SELECT * FROM materias 
-                WHERE id_mencion = ? AND activo = TRUE
-                ORDER BY semestre, nombre
+                SELECT 
+                    d.id_docente,
+                    d.nombre,
+                    d.apellido,
+                    d.especialidad,
+                    dm.gestion,
+                    dm.paralelo,
+                    dm.fecha_asignacion
+                FROM docente_materias dm
+                INNER JOIN docentes d ON dm.id_docente = d.id_docente
+                WHERE dm.id_materia = ?
+                ORDER BY dm.gestion DESC, dm.paralelo ASC
             `;
-            const materias = await executeQuery(query, [id_mencion]);
-            res.json({ success: true, data: materias });
+            const docentes = await executeQuery(query, [id]);
+            res.json({ success: true, data: docentes });
         } catch (error) {
             next(error);
         }
     },
-    obtenerMateriasPorSemestre: async (req, res, next) => {
+    obtenerInscripcionesMateria: async (req, res, next) => {
         try {
-            const { semestre } = req.params;
+            const { id } = req.params;
+            const { gestion = new Date().getFullYear() } = req.query;
+            
             const query = `
                 SELECT 
-                    m.*,
-                    men.nombre as mencion_nombre
-                FROM materias m
-                JOIN menciones men ON m.id_mencion = men.id_mencion
-                WHERE m.semestre = ? AND m.activo = TRUE
-                ORDER BY men.nombre, m.nombre
+                    i.*,
+                    e.nombre as estudiante_nombre,
+                    e.apellido as estudiante_apellido,
+                    e.ci as estudiante_ci
+                FROM inscripciones i
+                INNER JOIN estudiantes e ON i.id_estudiante = e.id_estudiante
+                WHERE i.id_materia = ? AND i.gestion = ?
+                ORDER BY e.apellido, e.nombre
             `;
-            const materias = await executeQuery(query, [semestre]);
-            res.json({ success: true, data: materias });
+            const inscripciones = await executeQuery(query, [id, gestion]);
+            res.json({ success: true, data: inscripciones });
         } catch (error) {
             next(error);
         }

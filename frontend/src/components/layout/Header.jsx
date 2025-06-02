@@ -61,9 +61,9 @@ const Header = ({ onMenuToggle, isMobileMenuOpen }) => {
               <div className="ml-3">
                 <h1 className="text-sm sm:text-base md:text-lg font-semibold text-secondary-900">
                   <span className="hidden sm:inline">Sistema Académico</span>
-                  <span className="sm:hidden">UMSA</span>
+                  <span className="sm:hidden">PROY</span>
                 </h1>
-                <p className="text-xs text-secondary-600 hidden sm:block">UMSA</p>
+                <p className="text-xs text-secondary-600 hidden sm:block">PROY</p>
               </div>
             </Link>
           </div>

@@ -165,7 +165,9 @@ const errorHandler = (error, req, res, next) => {
         errorResponse.requestId = req.requestId;
     }
 
-    res.status(statusCode).json(errorResponse);
+    // Ensure statusCode is a valid HTTP status code
+    const validStatusCode = typeof statusCode === 'number' ? statusCode : 500;
+    res.status(validStatusCode).json(errorResponse);
 };
 
 

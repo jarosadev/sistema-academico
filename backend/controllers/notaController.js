@@ -19,7 +19,7 @@ class NotaController {
                 materia = '',
                 docente = '',
                 gestion = '',
-                tipo_evaluacion = '',
+                id_tipo_evaluacion = '',
                 sortBy = 'fecha_registro',
                 sortOrder = 'DESC'
             } = req.query;
@@ -54,9 +54,9 @@ class NotaController {
                 queryParams.push(gestion);
             }
 
-            if (tipo_evaluacion) {
-                whereConditions.push('n.tipo_evaluacion = ?');
-                queryParams.push(tipo_evaluacion);
+            if (id_tipo_evaluacion) {
+                whereConditions.push('n.id_tipo_evaluacion = ?');
+                queryParams.push(id_tipo_evaluacion);
             }
 
             const whereClause = whereConditions.join(' AND ');
@@ -169,7 +169,7 @@ class NotaController {
             const notas = await executeQuery(query, [id]);
 
             if (notas.length === 0) {
-                throw createError(404, 'Nota no encontrada');
+                throw createError('Nota no encontrada', 404);
             }
 
             res.json({
@@ -203,7 +203,7 @@ class NotaController {
             );
 
             if (inscripcionExistente.length === 0) {
-                throw createError(404, 'Inscripción no encontrada');
+                throw createError('Inscripción no encontrada', 404);
             }
 
             // Verificar que el docente tiene asignada esta materia
@@ -215,17 +215,17 @@ class NotaController {
             `, [id_inscripcion, id_docente]);
 
             if (asignacionDocente.length === 0) {
-                throw createError(403, 'No tiene permisos para registrar notas en esta materia');
+                throw createError('No tiene permisos para registrar notas en esta materia', 403);
             }
 
             // Verificar que no exista ya una nota del mismo tipo para esta inscripción
             const notaExistente = await executeQuery(
-                'SELECT id_nota FROM notas WHERE id_inscripcion = ? AND tipo_evaluacion = ?',
-                [id_inscripcion, tipo_evaluacion]
+                'SELECT id_nota FROM notas WHERE id_inscripcion = ? AND id_tipo_evaluacion = ?',
+                [id_inscripcion, id_tipo_evaluacion]
             );
 
             if (notaExistente.length > 0) {
-                throw createError(409, `Ya existe una nota de tipo ${tipo_evaluacion} para esta inscripción`);
+                throw createError(`Ya existe una nota para este tipo de evaluación en esta inscripción`, 409);
             }
 
             // Validar calificación
@@ -246,8 +246,14 @@ class NotaController {
                 id_docente, observaciones
             ]);
 
-            // Actualizar estado de inscripción si es nota final
-            if (tipo_evaluacion === 'final') {
+            // Obtener información del tipo de evaluación
+            const tipoEvaluacion = await executeQuery(
+                'SELECT * FROM tipos_evaluacion WHERE id_tipo_evaluacion = ?',
+                [id_tipo_evaluacion]
+            );
+
+            // Actualizar estado de inscripción si es evaluación final
+            if (tipoEvaluacion[0].nombre.toLowerCase().includes('final')) {
                 const nuevoEstado = calificacion >= 51 ? 'aprobado' : 'reprobado';
                 await executeQuery(
                     'UPDATE inscripciones SET estado = ? WHERE id_inscripcion = ?',
@@ -293,14 +299,14 @@ class NotaController {
             );
 
             if (notaExistente.length === 0) {
-                throw createError(404, 'Nota no encontrada');
+                throw createError('Nota no encontrada', 404);
             }
 
             const datosAnteriores = notaExistente[0];
 
             // Verificar que el docente puede modificar esta nota
             if (datosAnteriores.id_docente !== id_docente && req.user.rol !== 'administrador') {
-                throw createError(403, 'No tiene permisos para modificar esta nota');
+                throw createError('No tiene permisos para modificar esta nota', 403);
             }
 
             // Validar calificación
@@ -323,7 +329,7 @@ class NotaController {
             }
 
             if (updateFields.length === 0) {
-                throw createError(400, 'No hay campos para actualizar');
+                throw createError('No hay campos para actualizar', 400);
             }
 
             updateFields.push('fecha_actualizacion = CURRENT_TIMESTAMP');
@@ -337,7 +343,13 @@ class NotaController {
             await executeQuery(query, updateParams);
 
             // Actualizar estado de inscripción si es nota final y cambió la calificación
-            if (datosAnteriores.tipo_evaluacion === 'final' && calificacion !== undefined) {
+            // Obtener información del tipo de evaluación
+            const tipoEvaluacion = await executeQuery(
+                'SELECT * FROM tipos_evaluacion WHERE id_tipo_evaluacion = ?',
+                [datosAnteriores.id_tipo_evaluacion]
+            );
+
+            if (tipoEvaluacion[0].nombre.toLowerCase().includes('final') && calificacion !== undefined) {
                 const nuevoEstado = calificacion >= 51 ? 'aprobado' : 'reprobado';
                 await executeQuery(
                     'UPDATE inscripciones SET estado = ? WHERE id_inscripcion = ?',
@@ -380,12 +392,12 @@ class NotaController {
             );
 
             if (notaExistente.length === 0) {
-                throw createError(404, 'Nota no encontrada');
+                throw createError('Nota no encontrada', 404);
             }
 
             // Verificar permisos
             if (notaExistente[0].id_docente !== id_docente && req.user.rol !== 'administrador') {
-                throw createError(403, 'No tiene permisos para eliminar esta nota');
+                throw createError('No tiene permisos para eliminar esta nota', 403);
             }
 
             // Eliminar nota
@@ -393,7 +405,13 @@ class NotaController {
             await executeQuery(query, [id]);
 
             // Si era nota final, actualizar estado de inscripción
-            if (notaExistente[0].tipo_evaluacion === 'final') {
+            // Obtener información del tipo de evaluación
+            const tipoEvaluacion = await executeQuery(
+                'SELECT * FROM tipos_evaluacion WHERE id_tipo_evaluacion = ?',
+                [notaExistente[0].id_tipo_evaluacion]
+            );
+
+            if (tipoEvaluacion[0].nombre.toLowerCase().includes('final')) {
                 await executeQuery(
                     'UPDATE inscripciones SET estado = "inscrito" WHERE id_inscripcion = ?',
                     [notaExistente[0].id_inscripcion]
@@ -427,24 +445,22 @@ class NotaController {
             );
 
             if (inscripcionExistente.length === 0) {
-                throw createError(404, 'Inscripción no encontrada');
+                throw createError('Inscripción no encontrada', 404);
             }
 
             const query = `
                 SELECT 
                     n.*,
                     d.nombre as docente_nombre,
-                    d.apellido as docente_apellido
+                    d.apellido as docente_apellido,
+                    te.nombre as tipo_evaluacion_nombre,
+                    te.porcentaje as tipo_evaluacion_porcentaje,
+                    te.orden
                 FROM notas n
                 INNER JOIN docentes d ON n.id_docente = d.id_docente
+                INNER JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
                 WHERE n.id_inscripcion = ?
-                ORDER BY 
-                    CASE n.tipo_evaluacion
-                        WHEN 'parcial1' THEN 1
-                        WHEN 'parcial2' THEN 2
-                        WHEN 'final' THEN 3
-                        WHEN 'segunda_instancia' THEN 4
-                    END
+                ORDER BY te.orden ASC
             `;
 
             const notas = await executeQuery(query, [id_inscripcion]);
@@ -452,12 +468,12 @@ class NotaController {
             // Calcular promedio si hay notas
             let promedio = null;
             if (notas.length > 0) {
-                const notaFinal = notas.find(n => n.tipo_evaluacion === 'final');
+                const notaFinal = notas.find(n => n.tipo_evaluacion_nombre.toLowerCase().includes('final'));
                 if (notaFinal) {
                     promedio = notaFinal.calificacion;
                 } else {
                     // Calcular promedio de parciales si no hay final
-                    const parciales = notas.filter(n => n.tipo_evaluacion.includes('parcial'));
+                    const parciales = notas.filter(n => n.tipo_evaluacion_nombre.toLowerCase().includes('parcial'));
                     if (parciales.length > 0) {
                         promedio = parciales.reduce((sum, n) => sum + n.calificacion, 0) / parciales.length;
                     }
@@ -484,7 +500,7 @@ class NotaController {
      */
     async obtenerEstadisticas(req, res, next) {
         try {
-            const { gestion = new Date().getFullYear(), id_materia = '', tipo_evaluacion = '' } = req.query;
+            const { gestion = new Date().getFullYear(), id_materia = '', id_tipo_evaluacion = '' } = req.query;
 
             let whereConditions = ['i.gestion = ?'];
             let queryParams = [gestion];
@@ -494,9 +510,9 @@ class NotaController {
                 queryParams.push(id_materia);
             }
 
-            if (tipo_evaluacion) {
-                whereConditions.push('n.tipo_evaluacion = ?');
-                queryParams.push(tipo_evaluacion);
+            if (id_tipo_evaluacion) {
+                whereConditions.push('n.id_tipo_evaluacion = ?');
+                queryParams.push(id_tipo_evaluacion);
             }
 
             const whereClause = whereConditions.join(' AND ');
@@ -516,22 +532,17 @@ class NotaController {
 
             const porTipoQuery = `
                 SELECT 
-                    n.tipo_evaluacion,
+                    te.nombre as tipo_evaluacion_nombre,
                     COUNT(*) as cantidad,
                     AVG(n.calificacion) as promedio,
                     MIN(n.calificacion) as minima,
                     MAX(n.calificacion) as maxima
                 FROM notas n
                 INNER JOIN inscripciones i ON n.id_inscripcion = i.id_inscripcion
+                INNER JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
                 WHERE ${whereClause}
-                GROUP BY n.tipo_evaluacion
-                ORDER BY 
-                    CASE n.tipo_evaluacion
-                        WHEN 'parcial1' THEN 1
-                        WHEN 'parcial2' THEN 2
-                        WHEN 'final' THEN 3
-                        WHEN 'segunda_instancia' THEN 4
-                    END
+                GROUP BY te.id_tipo_evaluacion, te.nombre
+                ORDER BY te.orden ASC
             `;
 
             const distribucionQuery = `
@@ -562,15 +573,18 @@ class NotaController {
                 success: true,
                 data: {
                     gestion: parseInt(gestion),
-                    filtros: { id_materia, tipo_evaluacion },
+                    filtros: { id_materia, id_tipo_evaluacion },
                     resumen: {
                         ...estadisticas[0],
                         promedio_general: Math.round(estadisticas[0].promedio_general * 100) / 100,
                         porcentaje_aprobacion: Math.round((estadisticas[0].aprobados / estadisticas[0].total_notas) * 100 * 100) / 100
                     },
                     por_tipo_evaluacion: porTipo.map(item => ({
-                        ...item,
-                        promedio: Math.round(item.promedio * 100) / 100
+                        tipo_evaluacion: item.tipo_evaluacion_nombre,
+                        cantidad: item.cantidad,
+                        promedio: Math.round(item.promedio * 100) / 100,
+                        minima: item.minima,
+                        maxima: item.maxima
                     })),
                     distribucion_notas: distribucion
                 }
@@ -586,11 +600,11 @@ class NotaController {
      */
     async registroMasivo(req, res, next) {
         try {
-            const { notas } = req.body; // Array de objetos con id_inscripcion, calificacion, tipo_evaluacion, observaciones
+            const { notas } = req.body; // Array de objetos con id_inscripcion, calificacion, id_tipo_evaluacion, observaciones
             const id_docente = req.user.docente_id;
 
             if (!Array.isArray(notas) || notas.length === 0) {
-                throw createError(400, 'Se requiere un array de notas');
+                throw createError('Se requiere un array de notas', 400);
             }
 
             const resultados = {
@@ -602,10 +616,10 @@ class NotaController {
             // Procesar cada nota
             for (let i = 0; i < notas.length; i++) {
                 try {
-                    const { id_inscripcion, calificacion, tipo_evaluacion, observaciones = '' } = notas[i];
+                    const { id_inscripcion, calificacion, id_tipo_evaluacion, observaciones = '' } = notas[i];
 
                     // Validaciones básicas
-                    if (!id_inscripcion || calificacion === undefined || !tipo_evaluacion) {
+                    if (!id_inscripcion || calificacion === undefined || !id_tipo_evaluacion) {
                         throw new Error(`Nota ${i + 1}: Faltan campos requeridos`);
                     }
 
@@ -615,8 +629,8 @@ class NotaController {
 
                     // Verificar duplicados
                     const existente = await executeQuery(
-                        'SELECT id_nota FROM notas WHERE id_inscripcion = ? AND tipo_evaluacion = ?',
-                        [id_inscripcion, tipo_evaluacion]
+                        'SELECT id_nota FROM notas WHERE id_inscripcion = ? AND id_tipo_evaluacion = ?',
+                        [id_inscripcion, id_tipo_evaluacion]
                     );
 
                     if (existente.length > 0) {
@@ -625,12 +639,18 @@ class NotaController {
 
                     // Registrar nota
                     await executeQuery(
-                        'INSERT INTO notas (id_inscripcion, calificacion, tipo_evaluacion, id_docente, observaciones) VALUES (?, ?, ?, ?, ?)',
-                        [id_inscripcion, calificacion, tipo_evaluacion, id_docente, observaciones]
+                        'INSERT INTO notas (id_inscripcion, calificacion, id_tipo_evaluacion, id_docente, observaciones) VALUES (?, ?, ?, ?, ?)',
+                        [id_inscripcion, calificacion, id_tipo_evaluacion, id_docente, observaciones]
                     );
 
                     // Actualizar estado si es final
-                    if (tipo_evaluacion === 'final') {
+                    // Obtener información del tipo de evaluación
+                    const tipoEvaluacion = await executeQuery(
+                        'SELECT * FROM tipos_evaluacion WHERE id_tipo_evaluacion = ?',
+                        [id_tipo_evaluacion]
+                    );
+
+                    if (tipoEvaluacion[0].nombre.toLowerCase().includes('final')) {
                         const nuevoEstado = calificacion >= 51 ? 'aprobado' : 'reprobado';
                         await executeQuery(
                             'UPDATE inscripciones SET estado = ? WHERE id_inscripcion = ?',
@@ -695,12 +715,18 @@ module.exports = {
             const { id_inscripcion } = req.params;
             const query = `
                 SELECT 
-                    AVG(CASE WHEN tipo_evaluacion = 'parcial1' THEN calificacion END) as parcial1,
-                    AVG(CASE WHEN tipo_evaluacion = 'parcial2' THEN calificacion END) as parcial2,
-                    AVG(CASE WHEN tipo_evaluacion = 'final' THEN calificacion END) as final,
-                    AVG(calificacion) as promedio_general
-                FROM notas 
-                WHERE id_inscripcion = ?
+                    GROUP_CONCAT(
+                        CONCAT(
+                            te.nombre, ': ',
+                            COALESCE(n.calificacion, 'No registrada')
+                        )
+                        ORDER BY te.orden
+                        SEPARATOR '; '
+                    ) as notas_detalle,
+                    AVG(n.calificacion) as promedio_general
+                FROM notas n
+                INNER JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
+                WHERE n.id_inscripcion = ?
             `;
             const promedios = await executeQuery(query, [id_inscripcion]);
             res.json({ success: true, data: promedios[0] });

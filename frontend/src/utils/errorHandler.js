@@ -1,3 +1,5 @@
+import { notificationService } from '../services/notificationService';
+
 // Manejo centralizado de errores
 export const errorHandler = {
   // Procesar errores de API
@@ -6,18 +8,23 @@ export const errorHandler = {
       // Error de respuesta del servidor
       const { status, data } = error.response;
       
+      // Skip processing for 401 errors - handled by api.js
+      if (status === 401) {
+        return {
+          type: 'auth',
+          message: '',
+          details: [],
+          handled: true,
+          skip: true // New flag to skip all notifications
+        };
+      }
+      
       switch (status) {
         case 400:
           return {
             type: 'validation',
             message: data.message || 'Datos inválidos',
             details: data.errors || []
-          };
-        case 401:
-          return {
-            type: 'auth',
-            message: 'No autorizado. Por favor, inicia sesión nuevamente.',
-            details: []
           };
         case 403:
           return {
@@ -76,7 +83,7 @@ export const errorHandler = {
   // Obtener mensaje de error amigable
   getFriendlyMessage: (error) => {
     const processedError = errorHandler.processApiError(error);
-    return processedError.message;
+    return processedError.skip ? '' : processedError.message;
   },
 
   // Verificar si es un error de autenticación
@@ -108,9 +115,28 @@ export const useErrorHandler = () => {
   const handleError = (error, showToast = true) => {
     const processedError = errorHandler.processApiError(error);
     
-    if (showToast) {
-      // Aquí podrías integrar con una librería de toast/notificaciones
-      console.error('Error:', processedError.message);
+    // Skip notifications for handled errors or when explicitly marked to skip
+    if (showToast && !processedError.handled && !processedError.skip) {
+      switch (processedError.type) {
+        case 'auth':
+          // Skip - handled by api.js
+          break;
+        case 'validation':
+          notificationService.warning(processedError.message);
+          break;
+        case 'permission':
+          notificationService.error(processedError.message);
+          break;
+        case 'network':
+          notificationService.error(processedError.message);
+          break;
+        case 'server':
+          notificationService.error(processedError.message);
+          break;
+        default:
+          notificationService.error(processedError.message);
+          break;
+      }
     }
     
     return processedError;
@@ -131,14 +157,20 @@ export const errorLogger = {
       context
     };
     
-    // En producción, aquí enviarías el error a un servicio de logging
-    console.error('Error logged:', errorInfo);
+    // Skip logging for handled session expiration
+    if (error.response?.status === 401) {
+      return;
+    }
     
-    // Opcional: enviar a servicio de logging externo
-    // sendToLoggingService(errorInfo);
+    console.error('Error logged:', errorInfo);
   },
 
   logApiError: (error, endpoint, method = 'GET') => {
+    // Skip logging for handled session expiration
+    if (error.response?.status === 401) {
+      return;
+    }
+    
     errorLogger.log(error, {
       type: 'api_error',
       endpoint,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Edit, Trash2, Eye, Users, UserCheck, UserX, GraduationCap } from 'lucide-react';
+import { Plus, Search, ClipboardCheck, TrendingUp, TrendingDown, Edit, Trash2, Eye } from 'lucide-react';
 import { dataService } from '../../services/dataService';
 import { useDebounce } from '../../hooks/useDebounce';
 import { notificationService } from '../../services/notificationService';
@@ -9,23 +9,23 @@ import Card from '../../components/ui/Card';
 import Table, { DataTable } from '../../components/ui/Table';
 import Modal from '../../components/ui/ModalImproved';
 import Loading from '../../components/ui/Loading';
-import EstudianteForm from '../../components/admin/EstudianteForm';
-import EstudianteDetalle from '../../components/admin/EstudianteDetalle';
+import NotaForm from '../../components/admin/NotaForm';
+import NotaDetalle from '../../components/admin/NotaDetalle';
 
-const EstudiantesPage = () => {
-  const [estudiantes, setEstudiantes] = useState([]);
+const NotasPage = () => {
+  const [notas, setNotas] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Estados para modales
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedEstudiante, setSelectedEstudiante] = useState(null);
+  const [selectedNota, setSelectedNota] = useState(null);
   
   // Estados para filtros y paginación
   const [filtros, setFiltros] = useState({
     search: '',
-    mencion: '',
+    gestion: '',
     estado: '',
     page: 1,
     limit: 10
@@ -39,26 +39,22 @@ const EstudiantesPage = () => {
   
   const [paginacion, setPaginacion] = useState({
     page: 1,
-    limit: 4,
+    limit: 10,
     total: 0,
     totalPages: 0
   });
   
   const [estadisticas, setEstadisticas] = useState({
-    total_estudiantes: 0,
-    activos: 0,
-    inactivos: 0,
-    graduados: 0,
-    suspendidos: 0
+    total_notas: 0,
+    promedio_general: 0,
+    aprobados: 0,
+    reprobados: 0
   });
-
-  const [menciones, setMenciones] = useState([]);
 
   // Cargar datos iniciales
   useEffect(() => {
-    cargarEstudiantes();
+    cargarNotas();
     cargarEstadisticas();
-    cargarMenciones();
   }, [filtros]);
 
   // Efecto para actualizar filtros cuando cambie el debounced search
@@ -70,14 +66,14 @@ const EstudiantesPage = () => {
     }));
   }, [debouncedSearch]);
 
-  const cargarEstudiantes = async () => {
+  const cargarNotas = async () => {
     try {
       setLoading(true);
-      const response = await dataService.estudiantes.getAll(filtros);
-      setEstudiantes(response.data);
+      const response = await dataService.notas.obtenerTodas(filtros);
+      setNotas(response.data);
       setPaginacion(response.pagination);
     } catch (error) {
-      notificationService.error('Error al cargar estudiantes: ' + error.message);
+      notificationService.error('Error al cargar notas: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -85,19 +81,10 @@ const EstudiantesPage = () => {
 
   const cargarEstadisticas = async () => {
     try {
-      const response = await dataService.estudiantes.getEstadisticas();
-      setEstadisticas(response.data.resumen);
+      const response = await dataService.notas.obtenerEstadisticas();
+      setEstadisticas(response.data);
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
-    }
-  };
-
-  const cargarMenciones = async () => {
-    try {
-      const response = await dataService.menciones.getAll({ activo: true });
-      setMenciones(response.data);
-    } catch (error) {
-      console.error('Error al cargar menciones:', error);
     }
   };
 
@@ -105,7 +92,7 @@ const EstudiantesPage = () => {
     setFiltros(prev => ({
       ...prev,
       [campo]: valor,
-      page: 1 // Resetear a primera página
+      page: 1
     }));
   };
 
@@ -116,122 +103,95 @@ const EstudiantesPage = () => {
     }));
   };
 
-  const handleCrearEstudiante = async (data) => {
-    let loadingToast = null;
+  const handleCrearNota = async (data) => {
+    const loadingToast = notificationService.loading('Registrando nota...');
     try {
-      loadingToast = notificationService.loading('Creando estudiante...');
-      await dataService.estudiantes.create(data);
-      notificationService.success('Estudiante creado exitosamente');
+      await dataService.notas.crear(data);
+      notificationService.dismissToast(loadingToast);
+      notificationService.success('Nota registrada exitosamente');
       setShowCreateModal(false);
-      cargarEstudiantes();
+      cargarNotas();
       cargarEstadisticas();
     } catch (error) {
-      notificationService.error('Error al crear estudiante: ' + error.message);
-    } finally {
-      if (loadingToast) notificationService.dismissToast(loadingToast);
+      notificationService.dismissToast(loadingToast);
+      notificationService.error('Error al registrar nota: ' + error.message);
     }
   };
 
-  const handleEditarEstudiante = async (data) => {
-    let loadingToast = null;
+  const handleEditarNota = async (data) => {
+    const loadingToast = notificationService.loading('Actualizando nota...');
     try {
-      loadingToast = notificationService.loading('Actualizando estudiante...');
-      await dataService.estudiantes.update(selectedEstudiante.id_estudiante, data);
-      notificationService.success('Estudiante actualizado exitosamente');
+      await dataService.notas.actualizar(selectedNota.id_nota, data);
+      notificationService.dismissToast(loadingToast);
+      notificationService.success('Nota actualizada exitosamente');
       setShowEditModal(false);
-      setSelectedEstudiante(null);
-      cargarEstudiantes();
+      setSelectedNota(null);
+      cargarNotas();
     } catch (error) {
-      notificationService.error('Error al actualizar estudiante: ' + error.message);
-    } finally {
-      if (loadingToast) notificationService.dismissToast(loadingToast);
+      notificationService.dismissToast(loadingToast);
+      notificationService.error('Error al actualizar nota: ' + error.message);
     }
   };
 
-  const handleEliminarEstudiante = async (estudiante) => {
-    const confirmed = await notificationService.confirmDelete(`${estudiante.nombre} ${estudiante.apellido}`);
+  const handleEliminarNota = async (nota) => {
+    const confirmed = await notificationService.confirmDelete(`Nota de ${nota.estudiante_nombre}`);
     if (confirmed) {
-      let loadingToast = null;
+      const loadingToast = notificationService.loading('Eliminando nota...');
       try {
-        loadingToast = notificationService.loading('Eliminando estudiante...');
-        await dataService.estudiantes.delete(estudiante.id_estudiante);
-        notificationService.success('Estudiante eliminado exitosamente');
-        cargarEstudiantes();
+        await dataService.notas.eliminar(nota.id_nota);
+        notificationService.dismissToast(loadingToast);
+        notificationService.success('Nota eliminada exitosamente');
+        cargarNotas();
         cargarEstadisticas();
       } catch (error) {
-        notificationService.error('Error al eliminar estudiante: ' + error.message);
-      } finally {
-        if (loadingToast) notificationService.dismissToast(loadingToast);
-      }
-    }
-  };
-
-  const handleCambiarEstado = async (estudiante, nuevoEstado) => {
-    const confirmed = await notificationService.confirm({
-      title: 'Cambiar estado del estudiante',
-      text: `¿Está seguro de cambiar el estado de ${estudiante.nombre} ${estudiante.apellido} a ${nuevoEstado}?`,
-      confirmButtonText: 'Sí, cambiar',
-      cancelButtonText: 'Cancelar'
-    });
-
-    if (confirmed) {
-      let loadingToast = null;
-      try {
-        loadingToast = notificationService.loading('Cambiando estado...');
-        await dataService.estudiantes.cambiarEstado(estudiante.id_estudiante, nuevoEstado);
-        notificationService.success(`Estado del estudiante cambiado a ${nuevoEstado}`);
-        cargarEstudiantes();
-        cargarEstadisticas();
-      } catch (error) {
-        notificationService.error('Error al cambiar estado: ' + error.message);
-      } finally {
-        if (loadingToast) notificationService.dismissToast(loadingToast);
+        notificationService.dismissToast(loadingToast);
+        notificationService.error('Error al eliminar nota: ' + error.message);
       }
     }
   };
 
   const columnas = [
     {
-      key: 'nombre_completo',
-      title: 'Nombre Completo',
-      render: (estudiante) => `${estudiante.nombre} ${estudiante.apellido}`
+      key: 'estudiante_nombre',
+      title: 'Estudiante',
+      render: (nota) => `${nota.estudiante_nombre} ${nota.estudiante_apellido}`
     },
     {
-      key: 'ci',
-      title: 'CI'
+      key: 'materia_nombre',
+      title: 'Materia'
     },
     {
-      key: 'correo',
-      title: 'Correo'
-    },
-    {
-      key: 'mencion_nombre',
-      title: 'Mención'
-    },
-    {
-      key: 'estado_academico',
-      title: 'Estado',
-      render: (estudiante) => (
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          estudiante.estado_academico === 'activo' ? 'bg-green-100 text-green-800' :
-          estudiante.estado_academico === 'graduado' ? 'bg-blue-100 text-blue-800' :
-          estudiante.estado_academico === 'suspendido' ? 'bg-red-100 text-red-800' :
-          'bg-gray-100 text-gray-800'
+      key: 'nota_final',
+      title: 'Nota Final',
+      render: (nota) => (
+        <span className={`font-semibold ${
+          nota.nota_final >= 51 ? 'text-green-600' : 'text-red-600'
         }`}>
-          {estudiante.estado_academico}
+          {nota.nota_final}
+        </span>
+      )
+    },
+    {
+      key: 'estado',
+      title: 'Estado',
+      render: (nota) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+          nota.nota_final >= 51 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+        }`}>
+          {nota.nota_final >= 51 ? 'Aprobado' : 'Reprobado'}
         </span>
       )
     },
     {
       key: 'acciones',
       title: 'Acciones',
-      render: (estudiante) => (
+      render: (nota) => (
         <div className="flex space-x-2">
           <Button
             size="sm"
             variant="secondary"
             onClick={() => {
-              setSelectedEstudiante(estudiante);
+              setSelectedNota(nota);
               setShowDetailModal(true);
             }}
           >
@@ -241,7 +201,7 @@ const EstudiantesPage = () => {
             size="sm"
             variant="secondary"
             onClick={() => {
-              setSelectedEstudiante(estudiante);
+              setSelectedNota(nota);
               setShowEditModal(true);
             }}
           >
@@ -250,7 +210,7 @@ const EstudiantesPage = () => {
           <Button
             size="sm"
             variant="danger"
-            onClick={() => handleEliminarEstudiante(estudiante)}
+            onClick={() => handleEliminarNota(nota)}
           >
             <Trash2 className="w-4 h-4" />
           </Button>
@@ -264,59 +224,50 @@ const EstudiantesPage = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-secondary-900">Gestión de Estudiantes</h1>
-          <p className="text-secondary-600 mt-1">Administra los estudiantes del sistema</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-secondary-900">Gestión de Notas</h1>
+          <p className="text-secondary-600 mt-1">Administra las calificaciones del sistema</p>
         </div>
         <Button onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto">
           <Plus className="w-4 h-4 mr-2" />
-          Nuevo Estudiante
+          Nueva Nota
         </Button>
       </div>
 
       {/* Estadísticas */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="flex items-center">
-            <Users className="w-8 h-8 text-blue-500" />
+            <ClipboardCheck className="w-8 h-8 text-blue-500" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Total</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.total_estudiantes}</p>
+              <p className="text-sm font-medium text-secondary-600">Total Notas</p>
+              <p className="text-2xl font-bold text-secondary-900">{estadisticas.total_notas}</p>
             </div>
           </div>
         </Card>
         <Card className="p-4">
           <div className="flex items-center">
-            <UserCheck className="w-8 h-8 text-green-500" />
+            <TrendingUp className="w-8 h-8 text-green-500" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Activos</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.activos}</p>
+              <p className="text-sm font-medium text-secondary-600">Aprobados</p>
+              <p className="text-2xl font-bold text-secondary-900">{estadisticas.aprobados}</p>
             </div>
           </div>
         </Card>
         <Card className="p-4">
           <div className="flex items-center">
-            <GraduationCap className="w-8 h-8 text-blue-500" />
+            <TrendingDown className="w-8 h-8 text-red-500" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Graduados</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.graduados}</p>
+              <p className="text-sm font-medium text-secondary-600">Reprobados</p>
+              <p className="text-2xl font-bold text-secondary-900">{estadisticas.reprobados}</p>
             </div>
           </div>
         </Card>
         <Card className="p-4">
           <div className="flex items-center">
-            <UserX className="w-8 h-8 text-red-500" />
+            <ClipboardCheck className="w-8 h-8 text-yellow-500" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Suspendidos</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.suspendidos}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center">
-            <UserX className="w-8 h-8 text-gray-500" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Inactivos</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.inactivos}</p>
+              <p className="text-sm font-medium text-secondary-600">Promedio</p>
+              <p className="text-2xl font-bold text-secondary-900">{estadisticas.promedio_general}</p>
             </div>
           </div>
         </Card>
@@ -327,7 +278,7 @@ const EstudiantesPage = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="sm:col-span-2 lg:col-span-1">
             <Input
-              placeholder="Buscar por nombre, apellido o CI..."
+              placeholder="Buscar por estudiante o materia..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               icon={<Search className="w-4 h-4" />}
@@ -337,15 +288,13 @@ const EstudiantesPage = () => {
           <div>
             <select
               className="w-full h-12 px-4 py-3 text-base border border-secondary-300 bg-white text-secondary-900 placeholder-secondary-400 rounded-lg focus:outline-none focus:ring-2 focus:border-primary-500 focus:ring-primary-500/20 transition-colors duration-200"
-              value={filtros.mencion}
-              onChange={(e) => handleFiltroChange('mencion', e.target.value)}
+              value={filtros.gestion}
+              onChange={(e) => handleFiltroChange('gestion', e.target.value)}
             >
-              <option value="">Todas las menciones</option>
-              {menciones.map(mencion => (
-                <option key={mencion.id_mencion} value={mencion.id_mencion}>
-                  {mencion.nombre}
-                </option>
-              ))}
+              <option value="">Todas las gestiones</option>
+              <option value="2024-1">2024-1</option>
+              <option value="2023-2">2023-2</option>
+              <option value="2023-1">2023-1</option>
             </select>
           </div>
           <div>
@@ -355,10 +304,8 @@ const EstudiantesPage = () => {
               onChange={(e) => handleFiltroChange('estado', e.target.value)}
             >
               <option value="">Todos los estados</option>
-              <option value="activo">Activo</option>
-              <option value="inactivo">Inactivo</option>
-              <option value="graduado">Graduado</option>
-              <option value="suspendido">Suspendido</option>
+              <option value="aprobado">Aprobados</option>
+              <option value="reprobado">Reprobados</option>
             </select>
           </div>
           <div>
@@ -385,7 +332,7 @@ const EstudiantesPage = () => {
         ) : (
           <>
             <DataTable
-              data={estudiantes}
+              data={notas}
               columns={columnas}
               loading={loading}
               onRowClick={null}
@@ -420,13 +367,12 @@ const EstudiantesPage = () => {
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Crear Nuevo Estudiante"
+        title="Registrar Nueva Nota"
         size="xl"
       >
-        <EstudianteForm
-          onSubmit={handleCrearEstudiante}
+        <NotaForm
+          onSubmit={handleCrearNota}
           onCancel={() => setShowCreateModal(false)}
-          menciones={menciones}
         />
       </Modal>
 
@@ -434,20 +380,19 @@ const EstudiantesPage = () => {
         isOpen={showEditModal}
         onClose={() => {
           setShowEditModal(false);
-          setSelectedEstudiante(null);
+          setSelectedNota(null);
         }}
-        title="Editar Estudiante"
+        title="Editar Nota"
         size="xl"
       >
-        {selectedEstudiante && (
-          <EstudianteForm
-            estudiante={selectedEstudiante}
-            onSubmit={handleEditarEstudiante}
+        {selectedNota && (
+          <NotaForm
+            nota={selectedNota}
+            onSubmit={handleEditarNota}
             onCancel={() => {
               setShowEditModal(false);
-              setSelectedEstudiante(null);
+              setSelectedNota(null);
             }}
-            menciones={menciones}
             isEdit={true}
           />
         )}
@@ -457,19 +402,18 @@ const EstudiantesPage = () => {
         isOpen={showDetailModal}
         onClose={() => {
           setShowDetailModal(false);
-          setSelectedEstudiante(null);
+          setSelectedNota(null);
         }}
-        title="Detalle del Estudiante"
+        title="Detalle de la Nota"
         size="xl"
       >
-        {selectedEstudiante && (
-          <EstudianteDetalle
-            estudiante={selectedEstudiante}
+        {selectedNota && (
+          <NotaDetalle
+            nota={selectedNota}
             onClose={() => {
               setShowDetailModal(false);
-              setSelectedEstudiante(null);
+              setSelectedNota(null);
             }}
-            onCambiarEstado={handleCambiarEstado}
           />
         )}
       </Modal>
@@ -477,4 +421,4 @@ const EstudiantesPage = () => {
   );
 };
 
-export default EstudiantesPage;
+export default NotasPage;

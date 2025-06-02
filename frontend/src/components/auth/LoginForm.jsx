@@ -46,8 +46,9 @@ const LoginForm = () => {
     const result = await login(formData);
     
     if (!result.success) {
-      // El error ya se maneja en el contexto
+      // El error ya se maneja en el contexto y se muestra en el alert
       console.error('Error de login:', result.message);
+      // Keep error visible longer by not clearing immediately
     }
   };
 
@@ -77,7 +78,7 @@ const LoginForm = () => {
             placeholder="tu.correo@umsa.edu.bo"
             icon={<Mail />}
             error={getFieldError('correo')}
-            required
+            
           />
 
           <div className="space-y-2">
@@ -96,7 +97,6 @@ const LoginForm = () => {
                 onChange={handleChange}
                 placeholder="Ingresa tu contraseña"
                 className={`input pl-10 pr-10 ${getFieldError('password') ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                required
               />
               <button
                 type="button"

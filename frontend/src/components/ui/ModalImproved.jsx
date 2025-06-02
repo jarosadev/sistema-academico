@@ -149,7 +149,7 @@ const Modal = ({
         <div
           ref={modalRef}
           className={`
-            relative bg-white rounded-lg shadow-2xl flex flex-col
+            relative bg-white rounded-2xl shadow-2xl flex flex-col
             ${modalSizeClass}
             ${modalHeightClass}
             ${animation ? 'transition-all duration-300 ease-out' : ''}
@@ -167,7 +167,7 @@ const Modal = ({
           {(title || showCloseButton || fullScreenable) && (
             <div className={`
               flex items-center justify-between p-4 sm:p-6 border-b border-secondary-200 bg-white flex-shrink-0
-              ${isFullScreen ? 'shadow-sm' : ''}
+              ${isFullScreen ? 'shadow-sm' : 'rounded-t-2xl'}
               ${headerClassName}
             `}>
               {title && (
@@ -228,6 +228,7 @@ const Modal = ({
               flex flex-col sm:flex-row items-stretch sm:items-center justify-end 
               space-y-2 sm:space-y-0 sm:space-x-3 p-4 sm:p-6 
               border-t border-secondary-200 bg-secondary-50 flex-shrink-0
+              ${isFullScreen ? '' : 'rounded-b-2xl'}
               ${footerClassName}
             `}>
               {footer}

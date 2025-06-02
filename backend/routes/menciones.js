@@ -6,7 +6,8 @@ const {
     getMencionById,
     updateMencion,
     deleteMencion,
-    getMencionStats
+    getMencionStats,
+    getMencionesEstadisticas
 } = require('../controllers/mencionController');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { validate, mentionSchemas, idParamSchema, paginationSchema, validateQuery, validateParams } = require('../middleware/validation');
@@ -17,6 +18,7 @@ router.use(authenticateToken);
 
 // Rutas públicas (solo lectura para usuarios autenticados)
 router.get('/', getMenciones);
+router.get('/estadisticas', getMencionesEstadisticas);
 router.get('/:id', getMencionById);
 router.get('/:id/stats', getMencionStats);
 

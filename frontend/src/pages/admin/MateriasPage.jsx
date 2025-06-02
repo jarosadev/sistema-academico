@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Edit, Trash2, Eye, Users, UserCheck, UserX, GraduationCap } from 'lucide-react';
+import { Plus, Search, Book, BookOpen, BookX, Edit, Trash2, Eye, ClipboardList } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { dataService } from '../../services/dataService';
 import { useDebounce } from '../../hooks/useDebounce';
 import { notificationService } from '../../services/notificationService';
@@ -9,24 +10,25 @@ import Card from '../../components/ui/Card';
 import Table, { DataTable } from '../../components/ui/Table';
 import Modal from '../../components/ui/ModalImproved';
 import Loading from '../../components/ui/Loading';
-import EstudianteForm from '../../components/admin/EstudianteForm';
-import EstudianteDetalle from '../../components/admin/EstudianteDetalle';
+import MateriaForm from '../../components/admin/MateriaForm';
+import MateriaDetalle from '../../components/admin/MateriaDetalle';
 
-const EstudiantesPage = () => {
-  const [estudiantes, setEstudiantes] = useState([]);
+const MateriasPage = () => {
+  const navigate = useNavigate();
+  const [materias, setMaterias] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Estados para modales
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedEstudiante, setSelectedEstudiante] = useState(null);
+  const [selectedMateria, setSelectedMateria] = useState(null);
   
   // Estados para filtros y paginación
   const [filtros, setFiltros] = useState({
     search: '',
     mencion: '',
-    estado: '',
+    semestre: '',
     page: 1,
     limit: 10
   });
@@ -39,24 +41,22 @@ const EstudiantesPage = () => {
   
   const [paginacion, setPaginacion] = useState({
     page: 1,
-    limit: 4,
+    limit: 10,
     total: 0,
     totalPages: 0
   });
   
   const [estadisticas, setEstadisticas] = useState({
-    total_estudiantes: 0,
-    activos: 0,
-    inactivos: 0,
-    graduados: 0,
-    suspendidos: 0
+    total_materias: 0,
+    activas: 0,
+    inactivas: 0
   });
 
   const [menciones, setMenciones] = useState([]);
 
   // Cargar datos iniciales
   useEffect(() => {
-    cargarEstudiantes();
+    cargarMaterias();
     cargarEstadisticas();
     cargarMenciones();
   }, [filtros]);
@@ -70,14 +70,14 @@ const EstudiantesPage = () => {
     }));
   }, [debouncedSearch]);
 
-  const cargarEstudiantes = async () => {
+  const cargarMaterias = async () => {
     try {
       setLoading(true);
-      const response = await dataService.estudiantes.getAll(filtros);
-      setEstudiantes(response.data);
+      const response = await dataService.materias.obtenerTodas(filtros);
+      setMaterias(response.data);
       setPaginacion(response.pagination);
     } catch (error) {
-      notificationService.error('Error al cargar estudiantes: ' + error.message);
+      notificationService.error('Error al cargar materias: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -85,16 +85,17 @@ const EstudiantesPage = () => {
 
   const cargarEstadisticas = async () => {
     try {
-      const response = await dataService.estudiantes.getEstadisticas();
+      const response = await dataService.materias.obtenerEstadisticas();
       setEstadisticas(response.data.resumen);
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
+      notificationService.error('Error al cargar estadísticas: ' + error.message);
     }
   };
 
   const cargarMenciones = async () => {
     try {
-      const response = await dataService.menciones.getAll({ activo: true });
+      const response = await dataService.menciones.obtenerTodas({ activo: true });
       setMenciones(response.data);
     } catch (error) {
       console.error('Error al cargar menciones:', error);
@@ -105,7 +106,7 @@ const EstudiantesPage = () => {
     setFiltros(prev => ({
       ...prev,
       [campo]: valor,
-      page: 1 // Resetear a primera página
+      page: 1
     }));
   };
 
@@ -116,74 +117,50 @@ const EstudiantesPage = () => {
     }));
   };
 
-  const handleCrearEstudiante = async (data) => {
+  const handleCrearMateria = async (data) => {
     let loadingToast = null;
     try {
-      loadingToast = notificationService.loading('Creando estudiante...');
-      await dataService.estudiantes.create(data);
-      notificationService.success('Estudiante creado exitosamente');
+      loadingToast = notificationService.loading('Creando materia...');
+      await dataService.materias.crear(data);
+      notificationService.success('Materia creada exitosamente');
       setShowCreateModal(false);
-      cargarEstudiantes();
+      cargarMaterias();
       cargarEstadisticas();
     } catch (error) {
-      notificationService.error('Error al crear estudiante: ' + error.message);
+      notificationService.error('Error al crear materia: ' + error.message);
     } finally {
       if (loadingToast) notificationService.dismissToast(loadingToast);
     }
   };
 
-  const handleEditarEstudiante = async (data) => {
+  const handleEditarMateria = async (data) => {
     let loadingToast = null;
     try {
-      loadingToast = notificationService.loading('Actualizando estudiante...');
-      await dataService.estudiantes.update(selectedEstudiante.id_estudiante, data);
-      notificationService.success('Estudiante actualizado exitosamente');
+      loadingToast = notificationService.loading('Actualizando materia...');
+      await dataService.materias.actualizar(selectedMateria.id_materia, data);
+      notificationService.success('Materia actualizada exitosamente');
       setShowEditModal(false);
-      setSelectedEstudiante(null);
-      cargarEstudiantes();
+      setSelectedMateria(null);
+      cargarMaterias();
     } catch (error) {
-      notificationService.error('Error al actualizar estudiante: ' + error.message);
+      notificationService.error('Error al actualizar materia: ' + error.message);
     } finally {
       if (loadingToast) notificationService.dismissToast(loadingToast);
     }
   };
 
-  const handleEliminarEstudiante = async (estudiante) => {
-    const confirmed = await notificationService.confirmDelete(`${estudiante.nombre} ${estudiante.apellido}`);
+  const handleEliminarMateria = async (materia) => {
+    const confirmed = await notificationService.confirmDelete(materia.nombre);
     if (confirmed) {
       let loadingToast = null;
       try {
-        loadingToast = notificationService.loading('Eliminando estudiante...');
-        await dataService.estudiantes.delete(estudiante.id_estudiante);
-        notificationService.success('Estudiante eliminado exitosamente');
-        cargarEstudiantes();
+        loadingToast = notificationService.loading('Eliminando materia...');
+        await dataService.materias.eliminar(materia.id_materia);
+        notificationService.success('Materia eliminada exitosamente');
+        cargarMaterias();
         cargarEstadisticas();
       } catch (error) {
-        notificationService.error('Error al eliminar estudiante: ' + error.message);
-      } finally {
-        if (loadingToast) notificationService.dismissToast(loadingToast);
-      }
-    }
-  };
-
-  const handleCambiarEstado = async (estudiante, nuevoEstado) => {
-    const confirmed = await notificationService.confirm({
-      title: 'Cambiar estado del estudiante',
-      text: `¿Está seguro de cambiar el estado de ${estudiante.nombre} ${estudiante.apellido} a ${nuevoEstado}?`,
-      confirmButtonText: 'Sí, cambiar',
-      cancelButtonText: 'Cancelar'
-    });
-
-    if (confirmed) {
-      let loadingToast = null;
-      try {
-        loadingToast = notificationService.loading('Cambiando estado...');
-        await dataService.estudiantes.cambiarEstado(estudiante.id_estudiante, nuevoEstado);
-        notificationService.success(`Estado del estudiante cambiado a ${nuevoEstado}`);
-        cargarEstudiantes();
-        cargarEstadisticas();
-      } catch (error) {
-        notificationService.error('Error al cambiar estado: ' + error.message);
+        notificationService.error('Error al eliminar materia: ' + error.message);
       } finally {
         if (loadingToast) notificationService.dismissToast(loadingToast);
       }
@@ -192,46 +169,42 @@ const EstudiantesPage = () => {
 
   const columnas = [
     {
-      key: 'nombre_completo',
-      title: 'Nombre Completo',
-      render: (estudiante) => `${estudiante.nombre} ${estudiante.apellido}`
+      key: 'sigla',
+      title: 'Sigla'
     },
     {
-      key: 'ci',
-      title: 'CI'
-    },
-    {
-      key: 'correo',
-      title: 'Correo'
+      key: 'nombre',
+      title: 'Nombre'
     },
     {
       key: 'mencion_nombre',
       title: 'Mención'
     },
     {
-      key: 'estado_academico',
+      key: 'semestre',
+      title: 'Semestre'
+    },
+    {
+      key: 'activo',
       title: 'Estado',
-      render: (estudiante) => (
+      render: (materia) => (
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          estudiante.estado_academico === 'activo' ? 'bg-green-100 text-green-800' :
-          estudiante.estado_academico === 'graduado' ? 'bg-blue-100 text-blue-800' :
-          estudiante.estado_academico === 'suspendido' ? 'bg-red-100 text-red-800' :
-          'bg-gray-100 text-gray-800'
+          materia.activo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
         }`}>
-          {estudiante.estado_academico}
+          {materia.activo ? 'Activa' : 'Inactiva'}
         </span>
       )
     },
     {
       key: 'acciones',
       title: 'Acciones',
-      render: (estudiante) => (
+      render: (materia) => (
         <div className="flex space-x-2">
           <Button
             size="sm"
             variant="secondary"
             onClick={() => {
-              setSelectedEstudiante(estudiante);
+              setSelectedMateria(materia);
               setShowDetailModal(true);
             }}
           >
@@ -241,7 +214,7 @@ const EstudiantesPage = () => {
             size="sm"
             variant="secondary"
             onClick={() => {
-              setSelectedEstudiante(estudiante);
+              setSelectedMateria(materia);
               setShowEditModal(true);
             }}
           >
@@ -249,8 +222,16 @@ const EstudiantesPage = () => {
           </Button>
           <Button
             size="sm"
+            variant="secondary"
+            onClick={() => navigate(`/materias/${materia.id_materia}/tipos-evaluacion`)}
+            title="Gestionar tipos de evaluación"
+          >
+            <ClipboardList className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
             variant="danger"
-            onClick={() => handleEliminarEstudiante(estudiante)}
+            onClick={() => handleEliminarMateria(materia)}
           >
             <Trash2 className="w-4 h-4" />
           </Button>
@@ -264,59 +245,41 @@ const EstudiantesPage = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-secondary-900">Gestión de Estudiantes</h1>
-          <p className="text-secondary-600 mt-1">Administra los estudiantes del sistema</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-secondary-900">Gestión de Materias</h1>
+          <p className="text-secondary-600 mt-1">Administra las materias del sistema</p>
         </div>
         <Button onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto">
           <Plus className="w-4 h-4 mr-2" />
-          Nuevo Estudiante
+          Nueva Materia
         </Button>
       </div>
 
       {/* Estadísticas */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="p-4">
           <div className="flex items-center">
-            <Users className="w-8 h-8 text-blue-500" />
+            <Book className="w-8 h-8 text-blue-500" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Total</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.total_estudiantes}</p>
+              <p className="text-sm font-medium text-secondary-600">Total Materias</p>
+              <p className="text-2xl font-bold text-secondary-900">{estadisticas.total_materias}</p>
             </div>
           </div>
         </Card>
         <Card className="p-4">
           <div className="flex items-center">
-            <UserCheck className="w-8 h-8 text-green-500" />
+            <BookOpen className="w-8 h-8 text-green-500" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Activos</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.activos}</p>
+              <p className="text-sm font-medium text-secondary-600">Activas</p>
+              <p className="text-2xl font-bold text-secondary-900">{estadisticas.activas}</p>
             </div>
           </div>
         </Card>
         <Card className="p-4">
           <div className="flex items-center">
-            <GraduationCap className="w-8 h-8 text-blue-500" />
+            <BookX className="w-8 h-8 text-gray-500" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Graduados</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.graduados}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center">
-            <UserX className="w-8 h-8 text-red-500" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Suspendidos</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.suspendidos}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center">
-            <UserX className="w-8 h-8 text-gray-500" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-secondary-600">Inactivos</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.inactivos}</p>
+              <p className="text-sm font-medium text-secondary-600">Inactivas</p>
+              <p className="text-2xl font-bold text-secondary-900">{estadisticas.inactivas}</p>
             </div>
           </div>
         </Card>
@@ -327,7 +290,7 @@ const EstudiantesPage = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="sm:col-span-2 lg:col-span-1">
             <Input
-              placeholder="Buscar por nombre, apellido o CI..."
+              placeholder="Buscar por sigla o nombre..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               icon={<Search className="w-4 h-4" />}
@@ -351,14 +314,15 @@ const EstudiantesPage = () => {
           <div>
             <select
               className="w-full h-12 px-4 py-3 text-base border border-secondary-300 bg-white text-secondary-900 placeholder-secondary-400 rounded-lg focus:outline-none focus:ring-2 focus:border-primary-500 focus:ring-primary-500/20 transition-colors duration-200"
-              value={filtros.estado}
-              onChange={(e) => handleFiltroChange('estado', e.target.value)}
+              value={filtros.semestre}
+              onChange={(e) => handleFiltroChange('semestre', e.target.value)}
             >
-              <option value="">Todos los estados</option>
-              <option value="activo">Activo</option>
-              <option value="inactivo">Inactivo</option>
-              <option value="graduado">Graduado</option>
-              <option value="suspendido">Suspendido</option>
+              <option value="">Todos los semestres</option>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(sem => (
+                <option key={sem} value={sem}>
+                  Semestre {sem}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -385,7 +349,7 @@ const EstudiantesPage = () => {
         ) : (
           <>
             <DataTable
-              data={estudiantes}
+              data={materias}
               columns={columnas}
               loading={loading}
               onRowClick={null}
@@ -420,11 +384,11 @@ const EstudiantesPage = () => {
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Crear Nuevo Estudiante"
+        title="Crear Nueva Materia"
         size="xl"
       >
-        <EstudianteForm
-          onSubmit={handleCrearEstudiante}
+        <MateriaForm
+          onSubmit={handleCrearMateria}
           onCancel={() => setShowCreateModal(false)}
           menciones={menciones}
         />
@@ -434,18 +398,18 @@ const EstudiantesPage = () => {
         isOpen={showEditModal}
         onClose={() => {
           setShowEditModal(false);
-          setSelectedEstudiante(null);
+          setSelectedMateria(null);
         }}
-        title="Editar Estudiante"
+        title="Editar Materia"
         size="xl"
       >
-        {selectedEstudiante && (
-          <EstudianteForm
-            estudiante={selectedEstudiante}
-            onSubmit={handleEditarEstudiante}
+        {selectedMateria && (
+          <MateriaForm
+            materia={selectedMateria}
+            onSubmit={handleEditarMateria}
             onCancel={() => {
               setShowEditModal(false);
-              setSelectedEstudiante(null);
+              setSelectedMateria(null);
             }}
             menciones={menciones}
             isEdit={true}
@@ -457,19 +421,18 @@ const EstudiantesPage = () => {
         isOpen={showDetailModal}
         onClose={() => {
           setShowDetailModal(false);
-          setSelectedEstudiante(null);
+          setSelectedMateria(null);
         }}
-        title="Detalle del Estudiante"
+        title="Detalle de la Materia"
         size="xl"
       >
-        {selectedEstudiante && (
-          <EstudianteDetalle
-            estudiante={selectedEstudiante}
+        {selectedMateria && (
+          <MateriaDetalle
+            materia={selectedMateria}
             onClose={() => {
               setShowDetailModal(false);
-              setSelectedEstudiante(null);
+              setSelectedMateria(null);
             }}
-            onCambiarEstado={handleCambiarEstado}
           />
         )}
       </Modal>
@@ -477,4 +440,4 @@ const EstudiantesPage = () => {
   );
 };
 
-export default EstudiantesPage;
+export default MateriasPage;

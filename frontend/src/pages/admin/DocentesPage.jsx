@@ -128,140 +128,182 @@ const DocentesPage = () => {
     }));
   };
 
-  const handleCrearDocente = async (data) => {
-    const loadingToast = notificationService.loading('Creando docente...');
-    try {
-      await dataService.docentes.create(data);
-      notificationService.dismissToast(loadingToast);
-      notificationService.success('Docente creado exitosamente');
-      setShowCreateModal(false);
-      cargarDocentes();
-      cargarEstadisticas();
-    } catch (error) {
-      notificationService.dismissToast(loadingToast);
-      notificationService.error('Error al crear docente: ' + error.message);
-    }
-  };
+    const handleCrearDocente = async (data) => {
+        let loadingToast = null;
+        try {
+            loadingToast = notificationService.loading('Creando docente...');
+            await dataService.docentes.create(data);
+            notificationService.success('Docente creado exitosamente');
+            setShowCreateModal(false);
+            cargarDocentes();
+            cargarEstadisticas();
+        } catch (error) {
+            if (loadingToast) notificationService.dismissToast(loadingToast);
+            if (error.response?.status === 409) {
+                // Manejar específicamente errores de conflicto (duplicados)
+                notificationService.warning(error.response.data.message || 'Ya existe un docente con esos datos');
+            } else {
+                notificationService.error('Error al crear docente: ' + error.message);
+            }
+        } finally {
+            if (loadingToast) notificationService.dismissToast(loadingToast);
+        }
+    };
 
   const handleEditarDocente = async (data) => {
-    const loadingToast = notificationService.loading('Actualizando docente...');
+    let loadingToast = null;
     try {
+      loadingToast = notificationService.loading('Actualizando docente...');
       await dataService.docentes.update(selectedDocente.id_docente, data);
-      notificationService.dismissToast(loadingToast);
       notificationService.success('Docente actualizado exitosamente');
       setShowEditModal(false);
       setSelectedDocente(null);
       cargarDocentes();
     } catch (error) {
-      notificationService.dismissToast(loadingToast);
-      notificationService.error('Error al actualizar docente: ' + error.message);
+      if (loadingToast) notificationService.dismissToast(loadingToast);
+      if (error.response?.status === 409) {
+        // Manejar específicamente errores de conflicto (duplicados)
+        notificationService.warning(error.response.data.message || 'Ya existe un docente con esos datos');
+      } else {
+        notificationService.error('Error al actualizar docente: ' + error.message);
+      }
+    } finally {
+      if (loadingToast) notificationService.dismissToast(loadingToast);
     }
   };
 
   const handleEliminarDocente = async (docente) => {
     const confirmed = await notificationService.confirmDelete(`${docente.nombre} ${docente.apellido}`);
     if (confirmed) {
-      const loadingToast = notificationService.loading('Eliminando docente...');
+      let loadingToast = null;
       try {
+        loadingToast = notificationService.loading('Eliminando docente...');
         await dataService.docentes.delete(docente.id_docente);
-        notificationService.dismissToast(loadingToast);
         notificationService.success('Docente eliminado exitosamente');
         cargarDocentes();
         cargarEstadisticas();
       } catch (error) {
-        notificationService.dismissToast(loadingToast);
+        if (loadingToast) notificationService.dismissToast(loadingToast);
         notificationService.error('Error al eliminar docente: ' + error.message);
+      } finally {
+        if (loadingToast) notificationService.dismissToast(loadingToast);
       }
     }
   };
 
   const handleAsignarMateria = async (docenteId, materiaData) => {
-    const loadingToast = notificationService.loading('Asignando materia...');
+    let loadingToast = null;
     try {
+      loadingToast = notificationService.loading('Asignando materia...');
       await dataService.docentes.asignarMateria(docenteId, materiaData);
-      notificationService.dismissToast(loadingToast);
       notificationService.success('Materia asignada exitosamente');
       cargarDocentes();
     } catch (error) {
-      notificationService.dismissToast(loadingToast);
-      notificationService.error('Error al asignar materia: ' + error.message);
+      if (error.response?.status === 409) {
+        notificationService.warning(error.response.data.message || 'El docente ya tiene asignada esta materia');
+      } else {
+        notificationService.error('Error al asignar materia: ' + error.message);
+      }
+    } finally {
+      if (loadingToast) notificationService.dismissToast(loadingToast);
     }
   };
 
-  const columnas = [
-    {
-      key: 'nombre_completo',
-      title: 'Nombre Completo',
-      render: (docente) => `${docente.nombre} ${docente.apellido}`
-    },
-    {
-      key: 'ci',
-      title: 'CI'
-    },
-    {
-      key: 'correo',
-      title: 'Correo'
-    },
-    {
-      key: 'especialidad',
-      title: 'Especialidad'
-    },
-    {
-      key: 'materias_asignadas',
-      title: 'Materias',
-      render: (docente) => (
-        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-          {docente.materias_asignadas || 0}
-        </span>
-      )
-    },
-    {
-      key: 'activo',
-      title: 'Estado',
-      render: (docente) => (
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          docente.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-        }`}>
-          {docente.activo ? 'Activo' : 'Inactivo'}
-        </span>
-      )
-    },
-    {
-      key: 'acciones',
-      title: 'Acciones',
-      render: (docente) => (
-        <div className="flex space-x-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              setSelectedDocente(docente);
-              setShowDetailModal(true);
-            }}
-          >
-            <Eye className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              setSelectedDocente(docente);
-              setShowEditModal(true);
-            }}
-          >
-            <Edit className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="danger"
-            onClick={() => handleEliminarDocente(docente)}
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      )
+  const handleRemoverMateria = async (docenteId, materiaId, gestion) => {
+    let loadingToast = null;
+    try {
+      loadingToast = notificationService.loading('Removiendo materia...');
+      await dataService.docentes.removerMateria(docenteId, materiaId, { gestion });
+      notificationService.success('Materia removida exitosamente');
+      cargarDocentes();
+    } catch (error) {
+      notificationService.error('Error al remover materia: ' + error.message);
+    } finally {
+      if (loadingToast) notificationService.dismissToast(loadingToast);
     }
-  ];
+  };
+
+    const columnas = [
+      {
+        key: 'nombre_completo',
+        title: 'Nombre',
+        className: 'w-48 truncate',
+        render: (docente) => `${docente.nombre} ${docente.apellido}`
+      },
+      {
+        key: 'ci',
+        title: 'CI',
+        className: 'w-20 hidden sm:table-cell truncate'
+      },
+      {
+        key: 'correo',
+        title: 'Correo',
+        className: 'w-40 hidden md:table-cell truncate'
+      },
+      {
+        key: 'especialidad',
+        title: 'Especialidad',
+        className: 'w-32 hidden lg:table-cell truncate'
+      },
+      {
+        key: 'materias_asignadas',
+        title: 'Materias',
+        className: 'w-20',
+        render: (docente) => (
+          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+            {docente.materias_asignadas || 0}
+          </span>
+        )
+      },
+      {
+        key: 'activo',
+        title: 'Estado',
+        className: 'w-24',
+        render: (docente) => (
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+            docente.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+          }`}>
+            {docente.activo ? 'Activo' : 'Inactivo'}
+          </span>
+        )
+      },
+      {
+        key: 'acciones',
+        title: 'Acciones',
+        className: 'w-28',
+        render: (docente) => (
+          <div className="flex space-x-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setSelectedDocente(docente);
+                setShowDetailModal(true);
+              }}
+            >
+              <Eye className="w-4 h-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setSelectedDocente(docente);
+                setShowEditModal(true);
+              }}
+            >
+              <Edit className="w-4 h-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => handleEliminarDocente(docente)}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )
+      }
+    ];
 
   return (
     <div className="space-y-6">
@@ -461,6 +503,7 @@ const DocentesPage = () => {
               setSelectedDocente(null);
             }}
             onAsignarMateria={handleAsignarMateria}
+            onRemoverMateria={handleRemoverMateria}
           />
         )}
       </Modal>

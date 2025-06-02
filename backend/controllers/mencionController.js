@@ -42,12 +42,12 @@ const createMencion = asyncHandler(async (req, res) => {
 
 // Obtener todas las menciones - VERSIÓN FINAL SIN PARÁMETROS EN LIMIT
 const getMenciones = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, search = '', activo = null } = req.query;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 10));
+    const search = req.query.search || '';
+    const activo = req.query.activo;
+    
     const offset = (page - 1) * limit;
-
-    // Validar y sanitizar parámetros de paginación
-    const limitNum = Math.max(1, Math.min(100, parseInt(limit))); // Entre 1 y 100
-    const offsetNum = Math.max(0, parseInt(offset));
 
     // Construir consulta base
     let baseQuery = 'SELECT * FROM menciones';
@@ -75,11 +75,14 @@ const getMenciones = asyncHandler(async (req, res) => {
     }
 
     // Construir consulta final SIN parámetros para LIMIT/OFFSET
-    const finalQuery = `${baseQuery} ORDER BY nombre ASC LIMIT ${limitNum} OFFSET ${offsetNum}`;
+    const finalQuery = `${baseQuery} ORDER BY nombre ASC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
     
-    // Ejecutar consultas
-    const menciones = await executeQuery(finalQuery, params);
-    const countResult = await executeQuery(countQuery, params);
+    // Ejecutar consultas en paralelo para mejor rendimiento
+    const [menciones, countResult] = await Promise.all([
+        executeQuery(finalQuery, params),
+        executeQuery(countQuery, params.slice(0, -2)) // Excluir limit y offset
+    ]);
     
     const total = countResult[0].total;
 
@@ -87,10 +90,10 @@ const getMenciones = asyncHandler(async (req, res) => {
         success: true,
         data: menciones,
         pagination: {
-            page: parseInt(page),
-            limit: limitNum,
+            page: page,
+            limit: limit,
             total,
-            pages: Math.ceil(total / limitNum)
+            totalPages: Math.ceil(total / limit)
         }
     });
 });
@@ -243,6 +246,55 @@ const deleteMencion = asyncHandler(async (req, res) => {
     });
 });
 
+// Obtener estadísticas generales de menciones
+const getMencionesEstadisticas = asyncHandler(async (req, res) => {
+    const estadisticasQuery = `
+        SELECT 
+            COUNT(*) as total_menciones,
+            COUNT(CASE WHEN activo = TRUE THEN 1 END) as activas,
+            COUNT(CASE WHEN activo = FALSE THEN 1 END) as inactivas
+        FROM menciones
+    `;
+
+    const porEstudiantesQuery = `
+        SELECT 
+            m.nombre as mencion,
+            COUNT(e.id_estudiante) as total_estudiantes,
+            COUNT(CASE WHEN e.estado_academico = 'activo' THEN 1 END) as estudiantes_activos
+        FROM menciones m
+        LEFT JOIN estudiantes e ON m.id_mencion = e.id_mencion
+        WHERE m.activo = TRUE
+        GROUP BY m.id_mencion, m.nombre
+        ORDER BY total_estudiantes DESC
+    `;
+
+    const porMateriasQuery = `
+        SELECT 
+            m.nombre as mencion,
+            COUNT(mat.id_materia) as total_materias
+        FROM menciones m
+        LEFT JOIN materias mat ON m.id_mencion = mat.id_mencion AND mat.activo = TRUE
+        WHERE m.activo = TRUE
+        GROUP BY m.id_mencion, m.nombre
+        ORDER BY total_materias DESC
+    `;
+
+    const [estadisticas, porEstudiantes, porMaterias] = await Promise.all([
+        executeQuery(estadisticasQuery),
+        executeQuery(porEstudiantesQuery),
+        executeQuery(porMateriasQuery)
+    ]);
+
+    res.json({
+        success: true,
+        data: {
+            resumen: estadisticas[0],
+            por_estudiantes: porEstudiantes,
+            por_materias: porMaterias
+        }
+    });
+});
+
 // Obtener estadísticas de la mención
 const getMencionStats = asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -289,5 +341,6 @@ module.exports = {
     getMencionById,
     updateMencion,
     deleteMencion,
-    getMencionStats
+    getMencionStats,
+    getMencionesEstadisticas
 };

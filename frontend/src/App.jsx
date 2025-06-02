@@ -17,6 +17,13 @@ import NotFoundPage from './pages/NotFoundPage';
 // Admin Pages
 import EstudiantesPage from './pages/admin/EstudiantesPage';
 import DocentesPage from './pages/admin/DocentesPage';
+import MencionesPage from './pages/admin/MencionesPage';
+import MateriasPage from './pages/admin/MateriasPage';
+import TiposEvaluacionPage from './pages/admin/TiposEvaluacionPage';
+import InscripcionesPage from './pages/admin/InscripcionesPage';
+import NotasPage from './pages/admin/NotasPage';
+import AuditoriaPage from './pages/admin/AuditoriaPage';
+
 
 function App() {
   return (
@@ -76,19 +83,29 @@ function App() {
                   </RoleBasedRoute>
                 } 
               />
-              <Route 
-                path="materias" 
-                element={
-                  <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
-                    <div>Gestión de Materias (En desarrollo)</div>
-                  </RoleBasedRoute>
-                } 
-              />
+              <Route path="materias">
+                <Route 
+                  index
+                  element={
+                    <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
+                      <MateriasPage/>
+                    </RoleBasedRoute>
+                  } 
+                />
+                <Route 
+                  path=":id_materia/tipos-evaluacion"
+                  element={
+                    <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
+                      <TiposEvaluacionPage/>
+                    </RoleBasedRoute>
+                  }
+                />
+              </Route>
               <Route 
                 path="menciones" 
                 element={
                   <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
-                    <div>Gestión de Menciones (En desarrollo)</div>
+                    <MencionesPage/>
                   </RoleBasedRoute>
                 } 
               />
@@ -96,7 +113,7 @@ function App() {
                 path="inscripciones" 
                 element={
                   <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
-                    <div>Gestión de Inscripciones (En desarrollo)</div>
+                    <InscripcionesPage/>
                   </RoleBasedRoute>
                 } 
               />
@@ -104,7 +121,7 @@ function App() {
                 path="notas" 
                 element={
                   <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
-                    <div>Gestión de Notas (En desarrollo)</div>
+                    <NotasPage/>
                   </RoleBasedRoute>
                 } 
               />
@@ -120,7 +137,7 @@ function App() {
                 path="auditoria" 
                 element={
                   <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
-                    <div>Auditoría del Sistema (En desarrollo)</div>
+                    <AuditoriaPage/>
                   </RoleBasedRoute>
                 } 
               />

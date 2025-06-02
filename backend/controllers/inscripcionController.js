@@ -544,6 +544,59 @@ class InscripcionController {
     }
 
     /**
+     * Obtener inscripciones por materia
+     */
+    async obtenerInscripcionesPorMateria(req, res, next) {
+        try {
+            const { id_materia } = req.params;
+            const { gestion = '', estado = '' } = req.query;
+
+            let whereConditions = ['i.id_materia = ?'];
+            let queryParams = [id_materia];
+
+            if (gestion) {
+                whereConditions.push('i.gestion = ?');
+                queryParams.push(gestion);
+            }
+
+            if (estado) {
+                whereConditions.push('i.estado = ?');
+                queryParams.push(estado);
+            }
+
+            const whereClause = whereConditions.join(' AND ');
+
+            const query = `
+                SELECT 
+                    i.*,
+                    e.nombre as estudiante_nombre,
+                    e.apellido as estudiante_apellido,
+                    e.ci as estudiante_ci,
+                    m.nombre as materia_nombre,
+                    m.sigla as materia_sigla,
+                    m.semestre,
+                    men.nombre as mencion_nombre
+                FROM inscripciones i
+                INNER JOIN estudiantes e ON i.id_estudiante = e.id_estudiante
+                INNER JOIN materias m ON i.id_materia = m.id_materia
+                LEFT JOIN menciones men ON m.id_mencion = men.id_mencion
+                WHERE ${whereClause}
+                ORDER BY e.apellido ASC, e.nombre ASC
+            `;
+
+            const inscripciones = await executeQuery(query, queryParams);
+
+            res.json({
+                success: true,
+                data: inscripciones
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
      * Inscripción masiva (para administradores)
      */
     async inscripcionMasiva(req, res, next) {
@@ -623,6 +676,7 @@ module.exports = {
     actualizarInscripcion: controller.actualizarInscripcion.bind(controller),
     eliminarInscripcion: controller.eliminarInscripcion.bind(controller),
     obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
+    obtenerInscripcionesPorMateria: controller.obtenerInscripcionesPorMateria.bind(controller),
     // Funciones adicionales que pueden faltar
     inscripcionMasiva: async (req, res, next) => {
         try {

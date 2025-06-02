@@ -84,6 +84,16 @@ router.get('/estudiante/:id_estudiante',
 );
 
 /**
+ * @route GET /api/inscripciones/materia/:id_materia
+ * @desc Obtener inscripciones de una materia específica
+ * @access Administrador, Docente
+ */
+router.get('/materia/:id_materia',
+    requireRole(['administrador', 'docente']),
+    inscripcionController.obtenerInscripcionesPorMateria
+);
+
+/**
  * @route POST /api/inscripciones/masiva
  * @desc Inscripción masiva de estudiantes
  * @access Administrador
