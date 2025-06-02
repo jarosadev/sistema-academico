@@ -64,6 +64,7 @@ class MateriaController {
                     m.activo,
                     m.fecha_creacion,
                     men.nombre as mencion_nombre,
+                    men.id_mencion,
                     COUNT(DISTINCT i.id_estudiante) as estudiantes_inscritos,
                     COUNT(DISTINCT dm.id_docente) as docentes_asignados
                 FROM materias m
@@ -129,7 +130,7 @@ class MateriaController {
             const materias = await executeQuery(query, [id]);
 
             if (materias.length === 0) {
-                throw createError(404, 'Materia no encontrada');
+                throw createError('Materia no encontrada', 404);
             }
 
             // Obtener docentes asignados
@@ -209,7 +210,7 @@ class MateriaController {
             );
 
             if (siglaExistente.length > 0) {
-                throw createError(409, 'Ya existe una materia con esa sigla en esta mención');
+                throw createError('Ya existe una materia con esa sigla en esta mención', 409);
             }
 
             // Verificar que la mención existe
@@ -219,7 +220,7 @@ class MateriaController {
             );
 
             if (mencionExistente.length === 0) {
-                throw createError(404, 'Mención no encontrada o inactiva');
+                throw createError('Mención no encontrada o inactiva', 404);
             }
 
             // Crear materia
@@ -277,7 +278,7 @@ class MateriaController {
             );
 
             if (materiaExistente.length === 0) {
-                throw createError(404, 'Materia no encontrada');
+                throw createError('Materia no encontrada', 404);
             }
 
             const datosAnteriores = materiaExistente[0];
@@ -290,7 +291,7 @@ class MateriaController {
                 );
 
                 if (siglaExistente.length > 0) {
-                    throw createError(409, 'Ya existe una materia con esa sigla en esta mención');
+                    throw createError('Ya existe una materia con esa sigla en esta mención', 409);
                 }
             }
 
@@ -347,7 +348,7 @@ class MateriaController {
             );
 
             if (materiaExistente.length === 0) {
-                throw createError(404, 'Materia no encontrada');
+                throw createError('Materia no encontrada', 404);
             }
 
             // Verificar que no tenga inscripciones activas
@@ -357,7 +358,7 @@ class MateriaController {
             );
 
             if (inscripcionesActivas[0].total > 0) {
-                throw createError(400, 'No se puede eliminar una materia con inscripciones en la gestión actual');
+                throw createError('No se puede eliminar una materia con inscripciones en la gestión actual', 400);
             }
 
             // Cambiar estado a inactivo
@@ -577,6 +578,51 @@ module.exports = {
             `;
             const inscripciones = await executeQuery(query, [id, gestion]);
             res.json({ success: true, data: inscripciones });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    obtenerParalelosMateria: async (req, res, next) => {
+        try {
+            const { id } = req.params;
+            const { gestion = new Date().getFullYear() } = req.query;
+
+            // Verificar que la materia existe
+            const materiaExistente = await executeQuery(
+                'SELECT id_materia FROM materias WHERE id_materia = ? AND activo = TRUE',
+                [id]
+            );
+
+            if (materiaExistente.length === 0) {
+                throw createError('Materia no encontrada o inactiva', 404);
+            }
+
+            // Obtener paralelos asignados a docentes para esta materia
+            const query = `
+                SELECT DISTINCT 
+                    dm.paralelo,
+                    COUNT(i.id_inscripcion) as estudiantes_inscritos,
+                    d.nombre as docente_nombre,
+                    d.apellido as docente_apellido
+                FROM docente_materias dm
+                LEFT JOIN docentes d ON dm.id_docente = d.id_docente
+                LEFT JOIN inscripciones i ON i.id_materia = dm.id_materia 
+                    AND i.paralelo = dm.paralelo 
+                    AND i.gestion = dm.gestion
+                WHERE dm.id_materia = ? 
+                    AND dm.gestion = ?
+                GROUP BY dm.paralelo, d.id_docente
+                ORDER BY dm.paralelo ASC
+            `;
+
+            const paralelos = await executeQuery(query, [id, gestion]);
+
+            res.json({
+                success: true,
+                data: paralelos
+            });
+
         } catch (error) {
             next(error);
         }

@@ -17,19 +17,24 @@ const InscripcionDetalle = ({ inscripcion, onClose, onCambiarEstado }) => {
       </div>
 
       <div className="flex space-x-3">
-        {inscripcion.estado !== 'activa' && (
-          <Button onClick={() => handleChangeEstado('activa')} variant="primary">
-            Marcar como Activa
+        {inscripcion.estado !== 'inscrito' && (
+          <Button onClick={() => handleChangeEstado('inscrito')} variant="primary">
+            Marcar como Inscrito
           </Button>
         )}
-        {inscripcion.estado !== 'finalizada' && (
-          <Button onClick={() => handleChangeEstado('finalizada')} variant="success">
-            Marcar como Finalizada
+        {inscripcion.estado !== 'aprobado' && (
+          <Button onClick={() => handleChangeEstado('aprobado')} variant="success">
+            Marcar como Aprobado
           </Button>
         )}
-        {inscripcion.estado !== 'anulada' && (
-          <Button onClick={() => handleChangeEstado('anulada')} variant="danger">
-            Marcar como Anulada
+        {inscripcion.estado !== 'reprobado' && (
+          <Button onClick={() => handleChangeEstado('reprobado')} variant="danger">
+            Marcar como Reprobado
+          </Button>
+        )}
+        {inscripcion.estado !== 'abandonado' && (
+          <Button onClick={() => handleChangeEstado('abandonado')} variant="warning">
+            Marcar como Abandonado
           </Button>
         )}
       </div>

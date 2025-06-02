@@ -88,6 +88,7 @@ export const dataService = {
     obtenerPorSemestre: (semestre) => api.get(`/materias/semestre/${semestre}`),
     obtenerInscripciones: (id) => api.get(`/materias/${id}/inscripciones`),
     obtenerDocentes: (id) => api.get(`/materias/${id}/docentes`),
+    obtenerParalelos: (id) => api.get(`/materias/${id}/paralelos`),
     
     // Métodos de compatibilidad
     getAll: (params = {}) => api.get('/materias', { params }),

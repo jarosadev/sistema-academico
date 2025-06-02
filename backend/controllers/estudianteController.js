@@ -66,6 +66,7 @@ class EstudianteController {
                     e.fecha_ingreso,
                     e.fecha_creacion,
                     m.nombre AS mencion_nombre,
+                    m.id_mencion,
                     u.correo,
                     u.activo AS usuario_activo
                 FROM estudiantes e
@@ -144,7 +145,7 @@ class EstudianteController {
             const estudiantes = await executeQuery(query, [id]);
 
             if (estudiantes.length === 0) {
-                throw createError(404, 'Estudiante no encontrado');
+                throw createError('Estudiante no encontrado', 404);
             }
 
             // Obtener historial académico
@@ -193,7 +194,7 @@ class EstudianteController {
             );
 
             if (ciExistente.length > 0) {
-                throw createError(409, 'Ya existe un estudiante con ese CI');
+                throw createError('Ya existe un estudiante con ese CI', 409);
             }
 
             // Verificar que el correo no exista
@@ -203,7 +204,7 @@ class EstudianteController {
             );
 
             if (correoExistente.length > 0) {
-                throw createError(409, 'Ya existe un usuario con ese correo');
+                throw createError('Ya existe un usuario con ese correo', 409);
             }
 
             // Crear usuario primero
@@ -285,7 +286,7 @@ class EstudianteController {
             );
 
             if (estudianteExistente.length === 0) {
-                throw createError(404, 'Estudiante no encontrado');
+                throw createError('Estudiante no encontrado', 404);
             }
 
             const datosAnteriores = estudianteExistente[0];
@@ -345,7 +346,7 @@ class EstudianteController {
             );
 
             if (estudianteExistente.length === 0) {
-                throw createError(404, 'Estudiante no encontrado');
+                throw createError('Estudiante no encontrado', 404);
             }
 
             // Cambiar estado a inactivo en lugar de eliminar
@@ -439,7 +440,7 @@ class EstudianteController {
             );
 
             if (estudianteExistente.length === 0) {
-                throw createError(404, 'Estudiante no encontrado');
+                throw createError('Estudiante no encontrado', 404);
             }
 
             const historialQuery = `

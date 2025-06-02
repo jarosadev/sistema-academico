@@ -37,13 +37,13 @@ const handleSessionExpiration = () => {
   // Remove token
   localStorage.removeItem('token');
   
-  // Dismiss any existing session expiration toasts
-  notificationService.dismissToast(SESSION_EXPIRED_TOAST_ID);
+  // Dismiss all existing toasts
+  notificationService.dismiss();
   
-  // Show single error notification with unique ID
+  // Show single error notification with unique ID and longer duration
   notificationService.error('Su sesión ha expirado', {
     id: SESSION_EXPIRED_TOAST_ID,
-    duration: 4000,
+    duration: 3000,
     position: 'top-center',
     important: true,
     description: 'Por favor, inicie sesión nuevamente.',
@@ -52,6 +52,9 @@ const handleSessionExpiration = () => {
       isHandlingExpiration = false;
     }
   });
+
+  // Set a flag to prevent further error notifications
+  window.__isSessionExpired = true;
 
   // Remove existing overlay if any
   const existingOverlay = document.getElementById('session-expired-overlay');
@@ -118,7 +121,8 @@ const handleSessionExpiration = () => {
     border-top: 3px solid #3498db;
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin-top: 1rem;
+    margin: 1rem auto 0;
+    display: block;
   `;
 
   // Add animation
@@ -148,17 +152,29 @@ api.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    // Handle session expiration only once
-    if (error.response?.status === 401 && !isHandlingExpiration) {
+    // Don't show session expired for login endpoint
+    const isLoginRequest = error.config?.url === '/auth/login';
+    
+    // Handle session expiration only for non-login requests
+    if (error.response?.status === 401 && !isLoginRequest && !isHandlingExpiration) {
       handleSessionExpiration();
     }
     
+    // Don't show additional error notifications if session is expired
+    if (window.__isSessionExpired) {
+      return Promise.reject({
+        ...error,
+        suppressNotification: true // Add flag to suppress notifications
+      });
+    }
+
     // Propagate error with additional info
     return Promise.reject({
       ...error,
       message: error.response?.data?.message || 'Error de conexión',
       status: error.response?.status,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      suppressNotification: false
     });
   }
 );

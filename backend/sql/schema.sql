@@ -168,7 +168,7 @@ CREATE TABLE inscripciones (
     id_inscripcion INT PRIMARY KEY AUTO_INCREMENT,
     id_estudiante INT NOT NULL,
     id_materia INT NOT NULL,
-    gestion INT NOT NULL,
+    gestion VARCHAR(10) NOT NULL,
     paralelo VARCHAR(5) NOT NULL DEFAULT 'A',
     fecha_inscripcion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     estado ENUM('inscrito', 'aprobado', 'reprobado', 'abandonado') DEFAULT 'inscrito',

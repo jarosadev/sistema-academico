@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { Users, GraduationCap, Percent } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Users, GraduationCap, Percent, ArrowLeft } from 'lucide-react';
 import { dataService } from '../../services/dataService';
 import { notificationService } from '../../services/notificationService';
 import Button from '../../components/ui/Button';
@@ -24,13 +24,13 @@ const StatCard = ({ title, value, icon: Icon, className = '' }) => (
 
 const TiposEvaluacionPage = () => {
     const { id_materia } = useParams();
+    const navigate = useNavigate();
     const [materia, setMateria] = useState(null);
     const [estadisticas, setEstadisticas] = useState(null);
     const [docentes, setDocentes] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        console.log(id_materia);
         const fetchData = async () => {
             try {
                 setLoading(true);
@@ -88,16 +88,27 @@ const TiposEvaluacionPage = () => {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold text-secondary-900">
-                        Tipos de Evaluación - {materia.nombre}
-                    </h1>
-                    <p className="text-secondary-600 mt-1">
-                        Gestión de tipos de evaluación para la materia {materia.sigla}
-                    </p>
+            <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:justify-between sm:items-center">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <Button
+                        variant="secondary"
+                        onClick={() => navigate(-1)}
+                        className="w-fit flex items-center gap-2"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        Volver
+                    </Button>
+                    <div className="space-y-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-secondary-900 break-words">
+                            Tipos de Evaluación - {materia.nombre}
+                        </h1>
+                        <p className="text-secondary-600">
+                            Gestión de tipos de evaluación para la materia {materia.sigla}
+                        </p>
+                    </div>
                 </div>
             </div>
+
 
             {/* Estadísticas */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

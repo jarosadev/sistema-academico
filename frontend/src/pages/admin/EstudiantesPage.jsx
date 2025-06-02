@@ -77,7 +77,9 @@ const EstudiantesPage = () => {
       setEstudiantes(response.data);
       setPaginacion(response.pagination);
     } catch (error) {
-      notificationService.error('Error al cargar estudiantes: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al cargar estudiantes: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -126,7 +128,9 @@ const EstudiantesPage = () => {
       cargarEstudiantes();
       cargarEstadisticas();
     } catch (error) {
-      notificationService.error('Error al crear estudiante: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al crear estudiante: ' + error.message);
+      }
     } finally {
       if (loadingToast) notificationService.dismissToast(loadingToast);
     }
@@ -142,7 +146,9 @@ const EstudiantesPage = () => {
       setSelectedEstudiante(null);
       cargarEstudiantes();
     } catch (error) {
-      notificationService.error('Error al actualizar estudiante: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al actualizar estudiante: ' + error.message);
+      }
     } finally {
       if (loadingToast) notificationService.dismissToast(loadingToast);
     }
@@ -159,7 +165,9 @@ const EstudiantesPage = () => {
         cargarEstudiantes();
         cargarEstadisticas();
       } catch (error) {
-        notificationService.error('Error al eliminar estudiante: ' + error.message);
+        if (!window.__isSessionExpired) {
+          notificationService.error('Error al eliminar estudiante: ' + error.message);
+        }
       } finally {
         if (loadingToast) notificationService.dismissToast(loadingToast);
       }
@@ -183,7 +191,9 @@ const EstudiantesPage = () => {
         cargarEstudiantes();
         cargarEstadisticas();
       } catch (error) {
-        notificationService.error('Error al cambiar estado: ' + error.message);
+        if (!window.__isSessionExpired) {
+          notificationService.error('Error al cambiar estado: ' + error.message);
+        }
       } finally {
         if (loadingToast) notificationService.dismissToast(loadingToast);
       }

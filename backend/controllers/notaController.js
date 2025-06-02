@@ -230,7 +230,7 @@ class NotaController {
 
             // Validar calificación
             if (calificacion < 0 || calificacion > 100) {
-                throw createError(400, 'La calificación debe estar entre 0 y 100');
+                throw createError('La calificación debe estar entre 0 y 100', 400);
             }
 
             // Registrar nota
@@ -311,7 +311,7 @@ class NotaController {
 
             // Validar calificación
             if (calificacion !== undefined && (calificacion < 0 || calificacion > 100)) {
-                throw createError(400, 'La calificación debe estar entre 0 y 100');
+                throw createError('La calificación debe estar entre 0 y 100', 400);
             }
 
             // Actualizar nota

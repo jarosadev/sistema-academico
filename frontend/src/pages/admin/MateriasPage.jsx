@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Book, BookOpen, BookX, Edit, Trash2, Eye, ClipboardList } from 'lucide-react';
+import { Plus, Search, Book, BookOpen, BookX, Edit, Trash2, Eye, ClipboardList, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { dataService } from '../../services/dataService';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -77,7 +77,9 @@ const MateriasPage = () => {
       setMaterias(response.data);
       setPaginacion(response.pagination);
     } catch (error) {
-      notificationService.error('Error al cargar materias: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al cargar materias: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -89,7 +91,9 @@ const MateriasPage = () => {
       setEstadisticas(response.data.resumen);
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
-      notificationService.error('Error al cargar estadísticas: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al cargar estadísticas: ' + error.message);
+      }
     }
   };
 
@@ -99,6 +103,7 @@ const MateriasPage = () => {
       setMenciones(response.data);
     } catch (error) {
       console.error('Error al cargar menciones:', error);
+      // Optionally suppress notification here as well if needed
     }
   };
 
@@ -227,6 +232,14 @@ const MateriasPage = () => {
             title="Gestionar tipos de evaluación"
           >
             <ClipboardList className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => navigate(`/materias/${materia.id_materia}/estudiantes`)}
+            title="Ver estudiantes inscritos"
+          >
+            <Users className="w-4 h-4" />
           </Button>
           <Button
             size="sm"

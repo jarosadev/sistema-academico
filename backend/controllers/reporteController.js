@@ -115,7 +115,7 @@ class ReporteController {
             const estudiante = await executeQuery(estudianteQuery, [id_estudiante]);
 
             if (estudiante.length === 0) {
-                throw createError(404, 'Estudiante no encontrado');
+                throw createError('Estudiante no encontrado', 404);
             }
 
             // Resumen académico actual
@@ -250,7 +250,7 @@ class ReporteController {
             const materia = await executeQuery(materiaQuery, [id_materia]);
 
             if (materia.length === 0) {
-                throw createError(404, 'Materia no encontrada');
+                throw createError('Materia no encontrada', 404);
             }
 
             // Estadísticas de inscripciones
@@ -387,7 +387,7 @@ class ReporteController {
             const docente = await executeQuery(docenteQuery, [id_docente]);
 
             if (docente.length === 0) {
-                throw createError(404, 'Docente no encontrado');
+                throw createError('Docente no encontrado', 404);
             }
 
             // Materias asignadas en la gestión
@@ -513,7 +513,7 @@ class ReporteController {
             const mencion = await executeQuery(mencionQuery, [id_mencion]);
 
             if (mencion.length === 0) {
-                throw createError(404, 'Mención no encontrada');
+                throw createError('Mención no encontrada', 404);
             }
 
             // Estadísticas de estudiantes
@@ -624,7 +624,7 @@ class ReporteController {
                     break;
 
                 case 'notas':
-                    if (!id) throw createError(400, 'Se requiere ID de materia para exportar notas');
+                    if (!id) throw createError('Se requiere ID de materia para exportar notas', 400);
                     const notas = await executeQuery(`
                         SELECT 
                             e.ci, e.nombre, e.apellido, i.paralelo,
@@ -645,12 +645,12 @@ class ReporteController {
                     break;
 
                 default:
-                    throw createError(400, 'Tipo de reporte no válido');
+                    throw createError('Tipo de reporte no válido', 400);
             }
 
             // Convertir a CSV básico
             if (data.length === 0) {
-                throw createError(404, 'No hay datos para exportar');
+                throw createError('No hay datos para exportar', 404);
             }
 
             const headers = Object.keys(data[0]);

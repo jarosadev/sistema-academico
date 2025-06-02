@@ -78,7 +78,9 @@ const InscripcionesPage = () => {
       setInscripciones(response.data);
       setPaginacion(response.pagination);
     } catch (error) {
-      notificationService.error('Error al cargar inscripciones: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al cargar inscripciones: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -118,7 +120,13 @@ const InscripcionesPage = () => {
       cargarInscripciones();
       cargarEstadisticas();
     } catch (error) {
-      notificationService.error('Error al crear inscripción: ' + error.message);
+      if (!window.__isSessionExpired) {
+        if (error.response?.status === 409) {
+          notificationService.warning(error.response.data.message || 'Ya tienes registrada una inscripción para esta materia en la gestión actual');
+        } else {
+          notificationService.error('Error al crear inscripción: ' + error.message);
+        }
+      }
     } finally {
       if (loadingToast) notificationService.dismissToast(loadingToast);
     }
@@ -134,7 +142,9 @@ const InscripcionesPage = () => {
       setSelectedInscripcion(null);
       cargarInscripciones();
     } catch (error) {
-      notificationService.error('Error al actualizar inscripción: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al actualizar inscripción: ' + error.message);
+      }
     } finally {
       if (loadingToast) notificationService.dismissToast(loadingToast);
     }
@@ -151,7 +161,9 @@ const InscripcionesPage = () => {
         cargarInscripciones();
         cargarEstadisticas();
       } catch (error) {
-        notificationService.error('Error al eliminar inscripción: ' + error.message);
+        if (!window.__isSessionExpired) {
+          notificationService.error('Error al eliminar inscripción: ' + error.message);
+        }
       } finally {
         if (loadingToast) notificationService.dismissToast(loadingToast);
       }
@@ -175,7 +187,9 @@ const InscripcionesPage = () => {
         cargarInscripciones();
         cargarEstadisticas();
       } catch (error) {
-        notificationService.error('Error al cambiar estado: ' + error.message);
+        if (!window.__isSessionExpired) {
+          notificationService.error('Error al cambiar estado: ' + error.message);
+        }
       } finally {
         if (loadingToast) notificationService.dismissToast(loadingToast);
       }
@@ -201,12 +215,13 @@ const InscripcionesPage = () => {
       title: 'Estado',
       render: (inscripcion) => (
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          inscripcion.estado === 'activa' ? 'bg-green-100 text-green-800' :
-          inscripcion.estado === 'finalizada' ? 'bg-blue-100 text-blue-800' :
-          inscripcion.estado === 'anulada' ? 'bg-red-100 text-red-800' :
+          inscripcion.estado === 'inscrito' ? 'bg-blue-100 text-blue-800' :
+          inscripcion.estado === 'aprobado' ? 'bg-green-100 text-green-800' :
+          inscripcion.estado === 'reprobado' ? 'bg-red-100 text-red-800' :
+          inscripcion.estado === 'abandonado' ? 'bg-yellow-100 text-yellow-800' :
           'bg-gray-100 text-gray-800'
         }`}>
-          {inscripcion.estado}
+          {inscripcion.estado.charAt(0).toUpperCase() + inscripcion.estado.slice(1)}
         </span>
       )
     },
@@ -320,9 +335,17 @@ const InscripcionesPage = () => {
               onChange={(e) => handleFiltroChange('gestion', e.target.value)}
             >
               <option value="">Todas las gestiones</option>
-              <option value="2024-1">2024-1</option>
-              <option value="2023-2">2023-2</option>
-              <option value="2023-1">2023-1</option>
+              {(() => {
+                const currentYear = new Date().getFullYear();
+                return [
+                  `${currentYear}-1`,
+                  `${currentYear}-2`,
+                  `${currentYear-1}-2`,
+                  `${currentYear-1}-1`
+                ].map(gestion => (
+                  <option key={gestion} value={gestion}>{gestion}</option>
+                ));
+              })()}
             </select>
           </div>
           <div>
@@ -332,9 +355,10 @@ const InscripcionesPage = () => {
               onChange={(e) => handleFiltroChange('estado', e.target.value)}
             >
               <option value="">Todos los estados</option>
-              <option value="activa">Activa</option>
-              <option value="finalizada">Finalizada</option>
-              <option value="anulada">Anulada</option>
+              <option value="inscrito">Inscrito</option>
+              <option value="aprobado">Aprobado</option>
+              <option value="reprobado">Reprobado</option>
+              <option value="abandonado">Abandonado</option>
             </select>
           </div>
           <div>

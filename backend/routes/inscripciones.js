@@ -105,4 +105,14 @@ router.post('/masiva',
     })
 );
 
+/**
+ * @route PUT /api/inscripciones/:id/estado
+ * @desc Actualizar estado de inscripción
+ * @access Administrador, Docente
+ */
+router.put('/:id/estado',
+    requireRole(['administrador', 'docente']),
+    inscripcionController.cambiarEstado
+);
+
 module.exports = router;

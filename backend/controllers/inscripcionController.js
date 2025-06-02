@@ -162,7 +162,7 @@ class InscripcionController {
             const inscripciones = await executeQuery(query, [id]);
 
             if (inscripciones.length === 0) {
-                throw createError(404, 'Inscripción no encontrada');
+                throw createError('Inscripción no encontrada', 404);
             }
 
             // Obtener notas de la inscripción
@@ -170,12 +170,14 @@ class InscripcionController {
                 SELECT 
                     n.*,
                     d.nombre as docente_nombre,
-                    d.apellido as docente_apellido
+                    d.apellido as docente_apellido,
+                    te.nombre as tipo_evaluacion
                 FROM notas n
                 LEFT JOIN docentes d ON n.id_docente = d.id_docente
+                LEFT JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
                 WHERE n.id_inscripcion = ?
                 ORDER BY 
-                    CASE n.tipo_evaluacion
+                    CASE te.nombre
                         WHEN 'parcial1' THEN 1
                         WHEN 'parcial2' THEN 2
                         WHEN 'final' THEN 3
@@ -217,7 +219,7 @@ class InscripcionController {
             );
 
             if (estudianteExistente.length === 0) {
-                throw createError(404, 'Estudiante no encontrado o inactivo');
+                throw createError('Estudiante no encontrado o inactivo', 404);
             }
 
             // Verificar que la materia existe y está activa
@@ -227,7 +229,7 @@ class InscripcionController {
             );
 
             if (materiaExistente.length === 0) {
-                throw createError(404, 'Materia no encontrada o inactiva');
+                throw createError('Materia no encontrada o inactiva', 404);
             }
 
             // Verificar que no esté ya inscrito en la misma materia y gestión
@@ -237,7 +239,7 @@ class InscripcionController {
             );
 
             if (inscripcionExistente.length > 0) {
-                throw createError(409, 'El estudiante ya está inscrito en esta materia para esta gestión');
+                throw createError('Ya tienes registrada una inscripción para esta materia en la gestión actual', 409);
             }
 
             // Verificar que la materia pertenece a la mención del estudiante
@@ -245,7 +247,7 @@ class InscripcionController {
             const mencionMateria = materiaExistente[0].id_mencion;
 
             if (mencionEstudiante !== mencionMateria) {
-                throw createError(400, 'La materia no pertenece a la mención del estudiante');
+                throw createError('La materia no pertenece a la mención del estudiante', 400);
             }
 
             // Verificar que hay cupo en el paralelo (opcional - se puede configurar límite)
@@ -259,7 +261,7 @@ class InscripcionController {
             const LIMITE_PARALELO = 30; // Configurable
 
             if (cupoResult[0].inscritos >= LIMITE_PARALELO) {
-                throw createError(400, `El paralelo ${paralelo} está lleno (límite: ${LIMITE_PARALELO} estudiantes)`);
+                throw createError(`El paralelo ${paralelo} está lleno (límite: ${LIMITE_PARALELO} estudiantes)`, 400);
             }
 
             // Crear inscripción
@@ -311,7 +313,7 @@ class InscripcionController {
             );
 
             if (inscripcionExistente.length === 0) {
-                throw createError(404, 'Inscripción no encontrada');
+                throw createError('Inscripción no encontrada', 404);
             }
 
             const datosAnteriores = inscripcionExistente[0];
@@ -319,7 +321,7 @@ class InscripcionController {
             // Validar cambio de estado
             const estadosValidos = ['inscrito', 'aprobado', 'reprobado', 'abandonado'];
             if (estado && !estadosValidos.includes(estado)) {
-                throw createError(400, 'Estado de inscripción inválido');
+                throw createError('Estado de inscripción inválido', 400);
             }
 
             // Si se cambia a aprobado, verificar que tenga nota final
@@ -330,7 +332,7 @@ class InscripcionController {
                 );
 
                 if (notaFinal.length === 0 || notaFinal[0].calificacion < 51) {
-                    throw createError(400, 'No se puede aprobar sin nota final válida (≥51)');
+                throw createError('No se puede aprobar sin nota final válida (≥51)', 400);
                 }
             }
 
@@ -349,7 +351,7 @@ class InscripcionController {
             }
 
             if (updateFields.length === 0) {
-                throw createError(400, 'No hay campos para actualizar');
+                throw createError('No hay campos para actualizar', 400);
             }
 
             updateFields.push('fecha_actualizacion = CURRENT_TIMESTAMP');
@@ -396,7 +398,7 @@ class InscripcionController {
             );
 
             if (inscripcionExistente.length === 0) {
-                throw createError(404, 'Inscripción no encontrada');
+                throw createError('Inscripción no encontrada', 404);
             }
 
             // Verificar que no tenga notas registradas
@@ -406,7 +408,7 @@ class InscripcionController {
             );
 
             if (notasExistentes[0].total > 0) {
-                throw createError(400, 'No se puede eliminar una inscripción con notas registradas');
+                throw createError('No se puede eliminar una inscripción con notas registradas', 400);
             }
 
             // Eliminar inscripción
@@ -456,11 +458,12 @@ class InscripcionController {
                     m.sigla as materia_sigla,
                     m.semestre,
                     men.nombre as mencion_nombre,
-                    AVG(CASE WHEN n.tipo_evaluacion = 'final' THEN n.calificacion END) as nota_final
+                    AVG(CASE WHEN te.nombre = 'final' THEN n.calificacion END) as nota_final
                 FROM inscripciones i
                 INNER JOIN materias m ON i.id_materia = m.id_materia
                 LEFT JOIN menciones men ON m.id_mencion = men.id_mencion
                 LEFT JOIN notas n ON i.id_inscripcion = n.id_inscripcion
+                LEFT JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
                 WHERE ${whereClause}
                 GROUP BY i.id_inscripcion
                 ORDER BY i.gestion DESC, m.semestre ASC
@@ -604,7 +607,7 @@ class InscripcionController {
             const { inscripciones } = req.body; // Array de objetos con id_estudiante, id_materia, gestion, paralelo
 
             if (!Array.isArray(inscripciones) || inscripciones.length === 0) {
-                throw createError(400, 'Se requiere un array de inscripciones');
+                throw createError('Se requiere un array de inscripciones', 400);
             }
 
             const resultados = {

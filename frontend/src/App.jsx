@@ -24,6 +24,7 @@ import InscripcionesPage from './pages/admin/InscripcionesPage';
 import NotasPage from './pages/admin/NotasPage';
 import AuditoriaPage from './pages/admin/AuditoriaPage';
 
+import EstudiantesPorMateriaPage from './pages/admin/EstudiantesPorMateriaPage';
 
 function App() {
   return (
@@ -97,6 +98,14 @@ function App() {
                   element={
                     <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
                       <TiposEvaluacionPage/>
+                    </RoleBasedRoute>
+                  }
+                />
+                <Route 
+                  path=":id_materia/estudiantes"
+                  element={
+                    <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
+                      <EstudiantesPorMateriaPage/>
                     </RoleBasedRoute>
                   }
                 />

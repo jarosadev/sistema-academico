@@ -111,4 +111,14 @@ router.get('/:id/inscripciones',
     materiaController.obtenerInscripcionesMateria
 );
 
+/**
+ * @route GET /api/materias/:id/paralelos
+ * @desc Obtener paralelos disponibles de una materia
+ * @access Administrador, Docente, Estudiante
+ */
+router.get('/:id/paralelos',
+    requireRole(['administrador', 'docente', 'estudiante']),
+    materiaController.obtenerParalelosMateria
+);
+
 module.exports = router;

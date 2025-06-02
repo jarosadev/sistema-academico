@@ -20,7 +20,7 @@ class TipoEvaluacionController {
             );
 
             if (materia.length === 0) {
-                throw createError(404, 'Materia no encontrada');
+                throw createError('Materia no encontrada', 404);
             }
 
             const query = `
@@ -63,7 +63,7 @@ class TipoEvaluacionController {
 
             const totalActual = porcentajesActuales[0].total || 0;
             if (totalActual + parseFloat(porcentaje) > 100) {
-                throw createError(400, 'La suma de porcentajes no puede exceder el 100%');
+                throw createError('La suma de porcentajes no puede exceder el 100%', 400);
             }
 
             const query = `
@@ -111,7 +111,7 @@ class TipoEvaluacionController {
             );
 
             if (tipoExistente.length === 0) {
-                throw createError(404, 'Tipo de evaluación no encontrado');
+                throw createError('Tipo de evaluación no encontrado', 404);
             }
 
             // Validar porcentaje total si se está actualizando el porcentaje
@@ -123,7 +123,7 @@ class TipoEvaluacionController {
 
                 const totalActual = porcentajesActuales[0].total || 0;
                 if (totalActual + parseFloat(porcentaje) > 100) {
-                    throw createError(400, 'La suma de porcentajes no puede exceder el 100%');
+                    throw createError('La suma de porcentajes no puede exceder el 100%', 400);
                 }
             }
 
@@ -148,7 +148,7 @@ class TipoEvaluacionController {
             }
 
             if (updates.length === 0) {
-                throw createError(400, 'No hay campos para actualizar');
+                throw createError('No hay campos para actualizar', 400);
             }
 
             params.push(id_tipo_evaluacion, id_materia);
@@ -190,7 +190,7 @@ class TipoEvaluacionController {
             );
 
             if (tipoExistente.length === 0) {
-                throw createError(404, 'Tipo de evaluación no encontrado');
+                throw createError('Tipo de evaluación no encontrado', 404);
             }
 
             // Verificar si hay notas asociadas

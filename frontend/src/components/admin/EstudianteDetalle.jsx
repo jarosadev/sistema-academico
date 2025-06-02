@@ -60,39 +60,40 @@ const EstudianteDetalle = ({ estudiante, onClose, onCambiarEstado }) => {
   };
 
   const tabs = [
-    { id: 'info', label: 'Información Personal', icon: User },
-    { id: 'academico', label: 'Historial Académico', icon: GraduationCap },
+    { id: 'info', label: 'Información', icon: User },
+    { id: 'academico', label: 'Académico', icon: GraduationCap },
     { id: 'inscripciones', label: 'Inscripciones', icon: BookOpen },
     { id: 'notas', label: 'Notas', icon: Award }
   ];
 
   return (
     <div className="space-y-6">
-      {/* Header con información básica */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center">
+      {/* Header con información básica */} 
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-start space-x-4">
+          <div className="w-16 h-16 bg-primary-100 rounded-full flex-shrink-0 flex items-center justify-center">
             <User className="w-8 h-8 text-primary-600" />
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-secondary-900">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl sm:text-2xl font-bold text-secondary-900 break-words">
               {estudiante.nombre} {estudiante.apellido}
             </h2>
             <p className="text-secondary-600">CI: {estudiante.ci}</p>
-            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getEstadoColor(estudiante.estado_academico)}`}>
+            <span className={`inline-block mt-1 px-2 py-1 rounded-full text-xs font-medium ${getEstadoColor(estudiante.estado_academico)}`}>
               {estudiante.estado_academico}
             </span>
           </div>
         </div>
         
         {/* Botones de acción */}
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2 sm:flex-nowrap">
           {estudiante.estado_academico === 'activo' && (
             <>
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={() => handleCambiarEstado('suspendido')}
+                className="w-full sm:w-auto"
               >
                 Suspender
               </Button>
@@ -100,6 +101,7 @@ const EstudianteDetalle = ({ estudiante, onClose, onCambiarEstado }) => {
                 size="sm"
                 variant="secondary"
                 onClick={() => handleCambiarEstado('graduado')}
+                className="w-full sm:w-auto"
               >
                 Graduar
               </Button>
@@ -110,6 +112,7 @@ const EstudianteDetalle = ({ estudiante, onClose, onCambiarEstado }) => {
               size="sm"
               variant="secondary"
               onClick={() => handleCambiarEstado('activo')}
+              className="w-full sm:w-auto"
             >
               Reactivar
             </Button>
@@ -119,6 +122,7 @@ const EstudianteDetalle = ({ estudiante, onClose, onCambiarEstado }) => {
               size="sm"
               variant="secondary"
               onClick={() => handleCambiarEstado('activo')}
+              className="w-full sm:w-auto"
             >
               Activar
             </Button>
@@ -128,15 +132,36 @@ const EstudianteDetalle = ({ estudiante, onClose, onCambiarEstado }) => {
 
       {/* Tabs */}
       <div className="border-b border-secondary-200">
-        <nav className="-mb-px flex space-x-8">
-          {tabs.map((tab) => {
+        <nav
+          className="-mb-px flex sm:flex-wrap overflow-x-auto sm:overflow-visible"
+          role="tablist"
+          aria-label="Secciones del detalle del estudiante"
+        >
+          {tabs.map((tab, index) => {
             const Icon = tab.icon;
+            const isSelected = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                  activeTab === tab.id
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls={`tabpanel-${tab.id}`}
+                id={`tab-${tab.id}`}
+                tabIndex={isSelected ? 0 : -1}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowRight') {
+                    const nextIndex = (index + 1) % tabs.length;
+                    setActiveTab(tabs[nextIndex].id);
+                    document.getElementById(`tab-${tabs[nextIndex].id}`).focus();
+                  } else if (e.key === 'ArrowLeft') {
+                    const prevIndex = (index - 1 + tabs.length) % tabs.length;
+                    setActiveTab(tabs[prevIndex].id);
+                    document.getElementById(`tab-${tabs[prevIndex].id}`).focus();
+                  }
+                }}
+                className={`py-2 px-3 border-b-2 font-medium text-sm flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
+                  isSelected
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-secondary-500 hover:text-secondary-700 hover:border-secondary-300'
                 }`}

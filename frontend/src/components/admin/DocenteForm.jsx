@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { User, Mail, Phone, Briefcase, Calendar, Lock } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import SearchableSelect from '../ui/SearchableSelect';
 import { useFormValidation, commonRules } from '../../utils/validation';
 
-const DocenteForm = ({ docente, onSubmit, onCancel, isEdit = false }) => {
+const DocenteForm = ({ docente, onSubmit, onCancel, isEdit = false, especialidades = [] }) => {
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -65,6 +66,14 @@ const DocenteForm = ({ docente, onSubmit, onCancel, isEdit = false }) => {
     }
   };
 
+  const handleEspecialidadChange = (selected) => {
+    setFormData(prev => ({
+      ...prev,
+      especialidad: selected
+    }));
+    validateField('especialidad', selected);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -88,28 +97,11 @@ const DocenteForm = ({ docente, onSubmit, onCancel, isEdit = false }) => {
     }
   };
 
-  // Lista de especialidades comunes
-  const especialidadesComunes = [
-    'Ingeniería de Sistemas',
-    'Ingeniería Industrial',
-    'Ingeniería Civil',
-    'Ingeniería Electrónica',
-    'Ingeniería Mecánica',
-    'Matemáticas',
-    'Física',
-    'Química',
-    'Estadística',
-    'Economía',
-    'Administración',
-    'Contabilidad',
-    'Derecho',
-    'Psicología',
-    'Sociología',
-    'Historia',
-    'Filosofía',
-    'Literatura',
-    'Idiomas'
-  ];
+  // Map specialties to options for SearchableSelect
+  const especialidadOptions = especialidades.map(esp => ({
+    label: esp,
+    value: esp
+  }));
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -184,28 +176,18 @@ const DocenteForm = ({ docente, onSubmit, onCancel, isEdit = false }) => {
             Información Profesional
           </h3>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-secondary-700">
-              Especialidad <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="especialidad"
-              value={formData.especialidad}
-              onChange={handleChange}
-              className={`w-full h-12 px-4 py-3 text-base border border-secondary-300 bg-white text-secondary-900 placeholder-secondary-400 rounded-lg focus:outline-none focus:ring-2 focus:border-primary-500 focus:ring-primary-500/20 transition-colors duration-200 ${hasFieldError('especialidad') ? 'border-red-500' : ''}`}
-              required
-            >
-              <option value="">Seleccione una especialidad</option>
-              {especialidadesComunes.map(esp => (
-                <option key={esp} value={esp}>
-                  {esp}
-                </option>
-              ))}
-            </select>
-            {getFieldError('especialidad') && (
-              <p className="text-sm text-red-600">{getFieldError('especialidad')}</p>
-            )}
-          </div>
+          <SearchableSelect
+            label="Especialidad"
+            name="especialidad"
+            value={formData.especialidad}
+            onChange={(e) => handleEspecialidadChange(e.target.value)}
+            options={especialidadOptions}
+            required
+            error={getFieldError('especialidad')}
+            placeholder="Seleccione o ingrese una especialidad"
+            allowCustom={true}
+            helperText="Puede seleccionar de la lista o escribir una nueva especialidad"
+          />
 
           <Input
             label="Fecha de Contratación"
@@ -281,5 +263,4 @@ const DocenteForm = ({ docente, onSubmit, onCancel, isEdit = false }) => {
     </form>
   );
 };
-
 export default DocenteForm;

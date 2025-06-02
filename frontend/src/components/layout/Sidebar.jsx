@@ -178,7 +178,14 @@ const Sidebar = ({ isOpen, onClose }) => {
   const navigationItems = getNavigationItems();
 
   const isActiveLink = (href) => {
-    return location.pathname === href;
+    // Exact match for dashboard and settings
+    if (href === '/dashboard' || href === '/settings') {
+      return location.pathname === href;
+    }
+    
+    // For other routes, check if the current path starts with the href
+    // This will match both exact and nested routes (e.g. /materias and /materias/123)
+    return href !== '/' && location.pathname.startsWith(href);
   };
 
   return (

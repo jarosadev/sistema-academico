@@ -17,7 +17,12 @@ async function auditAction(req, tabla, accion, id_registro = null, valores_anter
     try {
         // Obtener información del usuario desde el token
         const id_usuario = req.user?.id_usuario || null;
-        const ip_address = req.ip || req.connection.remoteAddress || 'unknown';
+        // Get real IP address considering proxy
+        const ip_address = req.headers['x-forwarded-for']?.split(',')[0].trim() || 
+                          req.ip || 
+                          req.connection?.remoteAddress || 
+                          req.socket?.remoteAddress || 
+                          'unknown';
         const user_agent = req.get('User-Agent') || 'unknown';
         
         // Preparar datos para insertar
@@ -56,7 +61,9 @@ async function auditAction(req, tabla, accion, id_registro = null, valores_anter
             id_usuario,
             tabla,
             accion,
-            id_registro,
+            typeof id_registro === 'object' && id_registro ? 
+                (id_registro.id_docente || id_registro.id_estudiante || id_registro.id_materia || id_registro.id || null) 
+                : id_registro,
             valores_anteriores ? JSON.stringify(filterSensitiveData(valores_anteriores)) : null,
             valores_nuevos ? JSON.stringify(filterSensitiveData(valores_nuevos)) : null,
             ip_address,

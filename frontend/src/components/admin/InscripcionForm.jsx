@@ -1,67 +1,141 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../ui/Button';
-import Input from '../ui/Input';
+import Select from '../ui/Select';
+import SearchableSelect from '../ui/SearchableSelect';
 import { useFormValidation, commonRules } from '../../utils/validation';
+import { dataService } from '../../services/dataService';
+import { notificationService } from '../../services/notificationService';
 
 const InscripcionForm = ({ inscripcion, onSubmit, onCancel, isEdit = false }) => {
   const [formData, setFormData] = useState({
     id_estudiante: '',
     id_materia: '',
     gestion: '',
-    paralelo: 'A',
+    paralelo: '',
     estado: 'inscrito'
   });
 
+  // Loading states
+  const [loading, setLoading] = useState({
+    estudiantes: true,
+    materias: true,
+    paralelos: false
+  });
+
+  // Options for selects
+  const [options, setOptions] = useState({
+    estudiantes: [],
+    materias: [],
+    paralelos: [],
+    gestiones: (() => {
+      const currentYear = new Date().getFullYear();
+      return [
+        { value: `${currentYear}-1`, label: `${currentYear}-1` },
+        { value: `${currentYear}-2`, label: `${currentYear}-2` },
+        { value: `${currentYear-1}-2`, label: `${currentYear-1}-2` },
+        { value: `${currentYear-1}-1`, label: `${currentYear-1}-1` }
+      ];
+    })(),
+    estados: [
+      { value: 'inscrito', label: 'Inscrito' },
+      { value: 'aprobado', label: 'Aprobado' },
+      { value: 'reprobado', label: 'Reprobado' },
+      { value: 'abandonado', label: 'Abandonado' }
+    ]
+  });
+
   const validationRules = {
-    id_estudiante: [
-      commonRules.required,
-      (value) => {
-        if (!/^[0-9]+$/.test(value)) {
-          return 'El ID debe ser un número válido';
-        }
-        return null;
-      }
-    ],
-    id_materia: [
-      commonRules.required,
-      (value) => {
-        if (!/^[0-9]+$/.test(value)) {
-          return 'El ID debe ser un número válido';
-        }
-        return null;
-      }
-    ],
-    gestion: [
-      commonRules.required,
-      (value) => {
-        if (!/^[0-9]{4}-[12]$/.test(value)) {
-          return 'La gestión debe tener el formato YYYY-1 o YYYY-2';
-        }
-        return null;
-      }
-    ],
-    paralelo: [
-      commonRules.required,
-      (value) => {
-        if (!/^[A-Z]$/.test(value)) {
-          return 'El paralelo debe ser una letra mayúscula (A, B, C, etc.)';
-        }
-        return null;
-      },
-      commonRules.maxLength(1)
-    ],
+    id_estudiante: [commonRules.required],
+    id_materia: [commonRules.required],
+    gestion: [commonRules.required],
+    paralelo: [commonRules.required],
     estado: [commonRules.required]
   };
 
-  const { validator, validateField, validate, getFieldError, hasFieldError } = useFormValidation(validationRules);
+  const { validator, validateField, validate, getFieldError } = useFormValidation(validationRules);
 
+  // Fetch initial data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch estudiantes
+        setLoading(prev => ({ ...prev, estudiantes: true }));
+        const estudiantesRes = await dataService.estudiantes.obtenerTodos();
+        setOptions(prev => ({
+          ...prev,
+          estudiantes: estudiantesRes.data.map(est => ({
+            value: est.id_estudiante,
+            label: `${est.apellido}, ${est.nombre} (${est.ci})`
+          }))
+        }));
+      } catch (error) {
+        notificationService.error('Error al cargar estudiantes');
+      } finally {
+        setLoading(prev => ({ ...prev, estudiantes: false }));
+      }
+
+      try {
+        // Fetch materias
+        setLoading(prev => ({ ...prev, materias: true }));
+        const materiasRes = await dataService.materias.obtenerTodas();
+        setOptions(prev => ({
+          ...prev,
+          materias: materiasRes.data.map(mat => ({
+            value: mat.id_materia,
+            label: `${mat.sigla} - ${mat.nombre}`
+          }))
+        }));
+      } catch (error) {
+        notificationService.error('Error al cargar materias');
+      } finally {
+        setLoading(prev => ({ ...prev, materias: false }));
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Fetch paralelos when materia is selected
+  useEffect(() => {
+    const fetchParalelos = async () => {
+      if (!formData.id_materia) {
+        setOptions(prev => ({ ...prev, paralelos: [] }));
+        return;
+      }
+
+      try {
+        setLoading(prev => ({ ...prev, paralelos: true }));
+        const paralelosRes = await dataService.materias.obtenerParalelos(formData.id_materia);
+        setOptions(prev => ({
+          ...prev,
+          paralelos: paralelosRes.data.map(p => ({
+            value: p.paralelo,
+            label: `Paralelo ${p.paralelo} - Prof. ${p.docente_nombre} ${p.docente_apellido}`
+          }))
+        }));
+
+        // Reset paralelo if current selection is not available
+        if (!paralelosRes.data.some(p => p.paralelo === formData.paralelo)) {
+          setFormData(prev => ({ ...prev, paralelo: '' }));
+        }
+      } catch (error) {
+        notificationService.error('Error al cargar paralelos');
+      } finally {
+        setLoading(prev => ({ ...prev, paralelos: false }));
+      }
+    };
+
+    fetchParalelos();
+  }, [formData.id_materia]);
+
+  // Load initial data for edit mode
   useEffect(() => {
     if (isEdit && inscripcion) {
       setFormData({
         id_estudiante: inscripcion.id_estudiante || '',
         id_materia: inscripcion.id_materia || '',
         gestion: inscripcion.gestion || '',
-        paralelo: inscripcion.paralelo || 'A',
+        paralelo: inscripcion.paralelo || '',
         estado: inscripcion.estado || 'inscrito'
       });
     }
@@ -69,22 +143,13 @@ const InscripcionForm = ({ inscripcion, onSubmit, onCancel, isEdit = false }) =>
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-
+    setFormData(prev => ({ ...prev, [name]: value }));
     validateField(name, value);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    if (!validate(formData)) {
-      return;
-    }
-
+    if (!validate(formData)) return;
     onSubmit(formData);
   };
 
@@ -93,87 +158,91 @@ const InscripcionForm = ({ inscripcion, onSubmit, onCancel, isEdit = false }) =>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Estudiante */}
         <div>
-          <Input
-            label="ID Estudiante"
+          <SearchableSelect
+            label="Estudiante"
             name="id_estudiante"
             value={formData.id_estudiante}
             onChange={handleChange}
+            options={options.estudiantes}
             error={getFieldError('id_estudiante')}
+            loading={loading.estudiantes}
             required
+            placeholder="Buscar estudiante..."
+            noOptionsText="No se encontraron estudiantes"
           />
         </div>
 
         {/* Materia */}
         <div>
-          <Input
-            label="ID Materia"
+          <SearchableSelect
+            label="Materia"
             name="id_materia"
             value={formData.id_materia}
             onChange={handleChange}
+            options={options.materias}
             error={getFieldError('id_materia')}
+            loading={loading.materias}
             required
+            placeholder="Buscar materia..."
+            noOptionsText="No se encontraron materias"
           />
         </div>
 
         {/* Gestión */}
         <div>
-          <Input
+          <Select
             label="Gestión"
             name="gestion"
             value={formData.gestion}
             onChange={handleChange}
             error={getFieldError('gestion')}
             required
-          />
+          >
+            <option value="">Seleccione gestión</option>
+            {options.gestiones.map(gestion => (
+              <option key={gestion.value} value={gestion.value}>
+                {gestion.label}
+              </option>
+            ))}
+          </Select>
         </div>
 
         {/* Paralelo */}
         <div>
-          <label className="block text-sm font-medium text-secondary-700 mb-2">
-            Paralelo
-          </label>
-          <select
+          <Select
+            label="Paralelo"
             name="paralelo"
             value={formData.paralelo}
             onChange={handleChange}
-            className={`w-full h-12 px-4 py-3 text-base border ${
-              hasFieldError('paralelo') ? 'border-red-500' : 'border-secondary-300'
-            } bg-white text-secondary-900 placeholder-secondary-400 rounded-lg focus:outline-none focus:ring-2 focus:border-primary-500 focus:ring-primary-500/20 transition-colors duration-200`}
+            error={getFieldError('paralelo')}
+            disabled={!formData.id_materia || loading.paralelos}
             required
           >
-            <option value="A">Paralelo A</option>
-            <option value="B">Paralelo B</option>
-            <option value="C">Paralelo C</option>
-            <option value="D">Paralelo D</option>
-            <option value="E">Paralelo E</option>
-          </select>
-          {getFieldError('paralelo') && (
-            <p className="mt-1 text-sm text-red-500">{getFieldError('paralelo')}</p>
-          )}
+            <option value="">Seleccione paralelo</option>
+            {options.paralelos.map(paralelo => (
+              <option key={paralelo.value} value={paralelo.value}>
+                {paralelo.label}
+              </option>
+            ))}
+          </Select>
         </div>
 
         {/* Estado */}
         <div>
-          <label className="block text-sm font-medium text-secondary-700 mb-2">
-            Estado
-          </label>
-          <select
+          <Select
+            label="Estado"
             name="estado"
             value={formData.estado}
             onChange={handleChange}
-            className={`w-full h-12 px-4 py-3 text-base border ${
-              hasFieldError('estado') ? 'border-red-500' : 'border-secondary-300'
-            } bg-white text-secondary-900 placeholder-secondary-400 rounded-lg focus:outline-none focus:ring-2 focus:border-primary-500 focus:ring-primary-500/20 transition-colors duration-200`}
+            error={getFieldError('estado')}
             required
           >
-            <option value="inscrito">Inscrito</option>
-            <option value="aprobado">Aprobado</option>
-            <option value="reprobado">Reprobado</option>
-            <option value="abandonado">Abandonado</option>
-          </select>
-          {getFieldError('estado') && (
-            <p className="mt-1 text-sm text-red-500">{getFieldError('estado')}</p>
-          )}
+            {options.estados.map(estado => (
+              <option key={estado.value} value={estado.value}>
+                {estado.label}
+              </option>
+            ))}
+          </Select>
         </div>
       </div>
 
@@ -190,6 +259,7 @@ const InscripcionForm = ({ inscripcion, onSubmit, onCancel, isEdit = false }) =>
         <Button
           type="submit"
           className="w-full sm:w-auto"
+          disabled={loading.estudiantes || loading.materias || loading.paralelos}
         >
           {isEdit ? 'Guardar Cambios' : 'Crear Inscripción'}
         </Button>

@@ -75,7 +75,9 @@ const DocentesPage = () => {
       setDocentes(response.data);
       setPaginacion(response.pagination);
     } catch (error) {
-      notificationService.error('Error al cargar docentes: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al cargar docentes: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -93,21 +95,49 @@ const DocentesPage = () => {
       }
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
+      // Optionally suppress notification here if needed
     }
   };
 
   const cargarEspecialidades = async () => {
     try {
-      // Si no tenemos especialidades de las estadísticas, cargar docentes para extraerlas
-      if (especialidades.length === 0) {
+      // Primero intentar cargar de las estadísticas
+      const statsResponse = await dataService.docentes.getEstadisticas();
+      let especialidadesUnicas = [];
+      
+      if (statsResponse.data.por_especialidad) {
+        especialidadesUnicas = statsResponse.data.por_especialidad.map(item => item.especialidad);
+      }
+
+      // Si no hay especialidades en las estadísticas, cargar de todos los docentes
+      if (especialidadesUnicas.length === 0) {
         const response = await dataService.docentes.getAll({ limit: 100 });
-        const especialidadesUnicas = [...new Set(
+        especialidadesUnicas = [...new Set(
           response.data
             .map(docente => docente.especialidad)
             .filter(esp => esp && esp.trim() !== '')
         )];
-        setEspecialidades(especialidadesUnicas);
       }
+
+      // Agregar algunas especialidades comunes si no están ya en la lista
+      const especialidadesComunes = [
+        'Ingeniería de Sistemas',
+        'Ingeniería Industrial',
+        'Ingeniería Civil',
+        'Ingeniería Electrónica',
+        'Ingeniería Mecánica',
+        'Matemáticas',
+        'Física',
+        'Química',
+        'Estadística'
+      ];
+
+      const todasLasEspecialidades = [...new Set([
+        ...especialidadesUnicas,
+        ...especialidadesComunes
+      ])].filter(esp => esp && esp.trim() !== '').sort();
+
+      setEspecialidades(todasLasEspecialidades);
     } catch (error) {
       console.error('Error al cargar especialidades:', error);
     }
@@ -461,6 +491,7 @@ const DocentesPage = () => {
         <DocenteForm
           onSubmit={handleCrearDocente}
           onCancel={() => setShowCreateModal(false)}
+          especialidades={especialidades}
         />
       </Modal>
 
@@ -482,6 +513,7 @@ const DocentesPage = () => {
               setSelectedDocente(null);
             }}
             isEdit={true}
+            especialidades={especialidades}
           />
         )}
       </Modal>
