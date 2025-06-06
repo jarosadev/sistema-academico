@@ -30,7 +30,7 @@ const LoginForm = () => {
     // Validar campo en tiempo real
     validateField(name, value);
     
-    // Limpiar errores generales
+    // Limpiar error cuando se modifica un campo
     if (error) {
       clearError();
     }
@@ -48,7 +48,7 @@ const LoginForm = () => {
     if (!result.success) {
       // El error ya se maneja en el contexto y se muestra en el alert
       console.error('Error de login:', result.message);
-      // Keep error visible longer by not clearing immediately
+      // No limpiar el error hasta que el usuario modifique un campo o envíe de nuevo
     }
   };
 
@@ -63,7 +63,7 @@ const LoginForm = () => {
         </div>
 
         {error && (
-          <Alert variant="error" className="mb-6" dismissible onDismiss={clearError}>
+          <Alert variant="error" className="mb-6" dismissible={false}>
             {error}
           </Alert>
         )}
@@ -78,41 +78,33 @@ const LoginForm = () => {
             placeholder="tu.correo@umsa.edu.bo"
             icon={<Mail />}
             error={getFieldError('correo')}
-            
+            required
           />
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-secondary-700">
-              Contraseña
-              <span className="text-red-500 ml-1">*</span>
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Lock className="w-5 h-5 text-secondary-400" />
-              </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Ingresa tu contraseña"
-                className={`input pl-10 pr-10 ${getFieldError('password') ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-              />
-              <button
-                type="button"
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5 text-secondary-400 hover:text-secondary-600" />
-                ) : (
-                  <Eye className="w-5 h-5 text-secondary-400 hover:text-secondary-600" />
-                )}
-              </button>
-            </div>
-            {getFieldError('password') && (
-              <p className="text-sm text-red-600">{getFieldError('password')}</p>
-            )}
+          <div className="relative">
+            <Input
+              label="Contraseña"
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              placeholder="Ingresa tu contraseña"
+              icon={<Lock />}
+              error={getFieldError('password')}
+              required
+              inputClassName="pr-10"
+            />
+            <button
+              type="button"
+              className="absolute right-0 top-[34px] pr-3 h-[42px] flex items-center"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? (
+                <EyeOff className="w-5 h-5 text-secondary-400 hover:text-secondary-600" />
+              ) : (
+                <Eye className="w-5 h-5 text-secondary-400 hover:text-secondary-600" />
+              )}
+            </button>
           </div>
 
           <div className="flex items-center justify-between">
