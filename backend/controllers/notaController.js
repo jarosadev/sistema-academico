@@ -6,7 +6,7 @@ const { auditAction } = require('../middleware/audit-complete');
  * Controlador para gestión de notas
  */
 class NotaController {
-    
+
     /**
      * Listar notas con paginación y filtros
      */
@@ -54,6 +54,11 @@ class NotaController {
                 queryParams.push(gestion);
             }
 
+            if (req.query.estado) {
+                whereConditions.push('CASE WHEN n.calificacion >= 51 THEN "aprobado" ELSE "reprobado" END = ?');
+                queryParams.push(req.query.estado);
+            }
+
             if (id_tipo_evaluacion) {
                 whereConditions.push('n.id_tipo_evaluacion = ?');
                 queryParams.push(id_tipo_evaluacion);
@@ -65,14 +70,13 @@ class NotaController {
             const query = `
                 SELECT 
                     n.id_nota,
-                    n.calificacion,
-                    n.tipo_evaluacion,
+                    n.calificacion AS nota_final,
                     n.fecha_registro,
                     n.observaciones,
                     i.id_inscripcion,
                     i.gestion,
                     i.paralelo,
-                    i.estado as estado_inscripcion,
+                    i.estado,
                     e.id_estudiante,
                     e.nombre as estudiante_nombre,
                     e.apellido as estudiante_apellido,
@@ -84,13 +88,15 @@ class NotaController {
                     men.nombre as mencion_nombre,
                     d.id_docente,
                     d.nombre as docente_nombre,
-                    d.apellido as docente_apellido
+                    d.apellido as docente_apellido,
+                    te.nombre as tipo_evaluacion_nombre
                 FROM notas n
                 INNER JOIN inscripciones i ON n.id_inscripcion = i.id_inscripcion
                 INNER JOIN estudiantes e ON i.id_estudiante = e.id_estudiante
                 INNER JOIN materias m ON i.id_materia = m.id_materia
                 LEFT JOIN menciones men ON m.id_mencion = men.id_mencion
                 INNER JOIN docentes d ON n.id_docente = d.id_docente
+                INNER JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
                 WHERE ${whereClause}
                 ORDER BY n.${sortBy} ${sortOrder}
                 LIMIT ${limitNum} OFFSET ${offset}
@@ -156,13 +162,16 @@ class NotaController {
                     men.nombre as mencion_nombre,
                     d.nombre as docente_nombre,
                     d.apellido as docente_apellido,
-                    d.especialidad as docente_especialidad
+                    d.especialidad as docente_especialidad,
+                    te.nombre as tipo_evaluacion_nombre,
+                    te.porcentaje as tipo_evaluacion_porcentaje
                 FROM notas n
                 INNER JOIN inscripciones i ON n.id_inscripcion = i.id_inscripcion
                 INNER JOIN estudiantes e ON i.id_estudiante = e.id_estudiante
                 INNER JOIN materias m ON i.id_materia = m.id_materia
                 LEFT JOIN menciones men ON m.id_mencion = men.id_mencion
                 INNER JOIN docentes d ON n.id_docente = d.id_docente
+                INNER JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
                 WHERE n.id_nota = ?
             `;
 
@@ -190,11 +199,12 @@ class NotaController {
             const {
                 id_inscripcion,
                 calificacion,
-                tipo_evaluacion,
+                id_tipo_evaluacion,
                 observaciones = ''
             } = req.body;
 
             const id_docente = req.user.docente_id; // Asumiendo que el docente está en el token
+            const isAdmin = req.user.roles.some(role => role.nombre === 'administrador');
 
             // Verificar que la inscripción existe
             const inscripcionExistente = await executeQuery(
@@ -206,16 +216,36 @@ class NotaController {
                 throw createError('Inscripción no encontrada', 404);
             }
 
-            // Verificar que el docente tiene asignada esta materia
-            const asignacionDocente = await executeQuery(`
-                SELECT dm.* FROM docente_materias dm
-                INNER JOIN inscripciones i ON dm.id_materia = i.id_materia 
-                    AND dm.gestion = i.gestion AND dm.paralelo = i.paralelo
-                WHERE i.id_inscripcion = ? AND dm.id_docente = ?
-            `, [id_inscripcion, id_docente]);
+            // Verificar que la inscripción corresponde al paralelo asignado al docente
+            const inscripcionInfo = await executeQuery(`
+                SELECT i.*, m.id_materia, m.nombre as materia_nombre 
+                FROM inscripciones i
+                INNER JOIN materias m ON i.id_materia = m.id_materia
+                WHERE i.id_inscripcion = ?
+            `, [id_inscripcion]);
 
-            if (asignacionDocente.length === 0) {
-                throw createError('No tiene permisos para registrar notas en esta materia', 403);
+            if (inscripcionInfo.length === 0) {
+                throw createError('Inscripción no encontrada', 404);
+            }
+
+            // Verificar asignación del docente al paralelo específico, solo si no es admin
+            if (!isAdmin) {
+                const asignacionDocente = await executeQuery(`
+                    SELECT dm.* FROM docente_materias dm
+                    WHERE dm.id_materia = ? 
+                    AND dm.id_docente = ?
+                    AND dm.gestion = ?
+                    AND dm.paralelo = ?
+                `, [
+                    inscripcionInfo[0].id_materia,
+                    id_docente,
+                    inscripcionInfo[0].gestion,
+                    inscripcionInfo[0].paralelo
+                ]);
+
+                if (asignacionDocente.length === 0) {
+                    throw createError(`No tiene permisos para registrar notas en el paralelo ${inscripcionInfo[0].paralelo} de la materia ${inscripcionInfo[0].materia_nombre}`, 403);
+                }
             }
 
             // Verificar que no exista ya una nota del mismo tipo para esta inscripción
@@ -229,20 +259,24 @@ class NotaController {
             }
 
             // Validar calificación
-            if (calificacion < 0 || calificacion > 100) {
-                throw createError('La calificación debe estar entre 0 y 100', 400);
+            const calificacionNum = parseFloat(calificacion);
+            if (isNaN(calificacionNum) || calificacionNum < 0 || calificacionNum > 100) {
+                throw createError('La calificación debe ser un número entre 0 y 100', 400);
             }
+
+            // Redondear a 2 decimales
+            const calificacionFinal = Math.round(calificacionNum * 100) / 100;
 
             // Registrar nota
             const query = `
                 INSERT INTO notas (
-                    id_inscripcion, calificacion, tipo_evaluacion, 
+                    id_inscripcion, calificacion, id_tipo_evaluacion, 
                     id_docente, observaciones
                 ) VALUES (?, ?, ?, ?, ?)
             `;
 
             const result = await executeQuery(query, [
-                id_inscripcion, calificacion, tipo_evaluacion, 
+                id_inscripcion, calificacionFinal, id_tipo_evaluacion,
                 id_docente, observaciones
             ]);
 
@@ -263,7 +297,7 @@ class NotaController {
 
             // Auditar acción
             await auditAction(req, 'notas', 'INSERT', result.insertId, null, {
-                id_inscripcion, calificacion, tipo_evaluacion, id_docente
+                id_inscripcion, calificacion, id_tipo_evaluacion, id_docente
             });
 
             res.status(201).json({
@@ -272,8 +306,8 @@ class NotaController {
                 data: {
                     id_nota: result.insertId,
                     id_inscripcion: parseInt(id_inscripcion),
-                    calificacion: parseFloat(calificacion),
-                    tipo_evaluacion,
+                    calificacion: parseFloat(calificacionFinal),
+                    id_tipo_evaluacion: parseInt(id_tipo_evaluacion),
                     id_docente: parseInt(id_docente)
                 }
             });
@@ -305,7 +339,8 @@ class NotaController {
             const datosAnteriores = notaExistente[0];
 
             // Verificar que el docente puede modificar esta nota
-            if (datosAnteriores.id_docente !== id_docente && req.user.rol !== 'administrador') {
+            const isAdmin = req.user.roles.some(role => role.nombre === 'administrador');
+            if (datosAnteriores.id_docente !== id_docente && !isAdmin) {
                 throw createError('No tiene permisos para modificar esta nota', 403);
             }
 
@@ -396,7 +431,8 @@ class NotaController {
             }
 
             // Verificar permisos
-            if (notaExistente[0].id_docente !== id_docente && req.user.rol !== 'administrador') {
+            const isAdmin = req.user.roles.some(role => role.nombre === 'administrador');
+            if (notaExistente[0].id_docente !== id_docente && !isAdmin) {
                 throw createError('No tiene permisos para eliminar esta nota', 403);
             }
 
@@ -600,8 +636,20 @@ class NotaController {
      */
     async registroMasivo(req, res, next) {
         try {
-            const { notas } = req.body; // Array de objetos con id_inscripcion, calificacion, id_tipo_evaluacion, observaciones
-            const id_docente = req.user.docente_id;
+            const { notas, paralelos } = req.body;
+
+            // Validar usuario y permisos
+            const isAdmin = req.user?.roles?.some(role => role.nombre === 'administrador') || false;
+            const id_docente = req.user?.id_docente || req.user?.docente_id || null;
+
+            // Validar paralelos seleccionados
+            if (!Array.isArray(paralelos) || paralelos.length === 0) {
+                throw createError('Debe seleccionar al menos un paralelo', 400);
+            }
+
+            if (!isAdmin && !id_docente) {
+                throw createError('No se pudo identificar al docente', 401);
+            }
 
             if (!Array.isArray(notas) || notas.length === 0) {
                 throw createError('Se requiere un array de notas', 400);
@@ -613,66 +661,101 @@ class NotaController {
                 errores: []
             };
 
+            // Agrupar notas por inscripción para calcular nota final
+            const notasPorInscripcion = {};
+
             // Procesar cada nota
-            for (let i = 0; i < notas.length; i++) {
+            for (const nota of notas) {
                 try {
-                    const { id_inscripcion, calificacion, id_tipo_evaluacion, observaciones = '' } = notas[i];
+                    const { id_inscripcion, calificacion, id_tipo_evaluacion, observaciones = '' } = nota;
+
+                    // Verificar que la inscripción pertenece a los paralelos seleccionados
+                    const inscripcionParalelo = await executeQuery(
+                        'SELECT paralelo FROM inscripciones WHERE id_inscripcion = ?',
+                        [id_inscripcion]
+                    );
+
+                    if (inscripcionParalelo.length === 0 || !paralelos.includes(inscripcionParalelo[0].paralelo)) {
+                        continue; // Saltar esta nota si no pertenece a los paralelos seleccionados
+                    }
 
                     // Validaciones básicas
                     if (!id_inscripcion || calificacion === undefined || !id_tipo_evaluacion) {
-                        throw new Error(`Nota ${i + 1}: Faltan campos requeridos`);
+                        throw new Error('Faltan campos requeridos');
                     }
 
                     if (calificacion < 0 || calificacion > 100) {
-                        throw new Error(`Nota ${i + 1}: Calificación inválida`);
+                        throw new Error('La calificación debe estar entre 0 y 100');
                     }
 
-                    // Verificar duplicados
-                    const existente = await executeQuery(
+                    // Verificar inscripción y obtener datos de la materia
+                    const inscripcion = await executeQuery(
+                        'SELECT i.id_materia, i.gestion, i.paralelo FROM inscripciones i WHERE i.id_inscripcion = ?',
+                        [id_inscripcion]
+                    );
+
+                    if (inscripcion.length === 0) {
+                        throw new Error('Inscripción no encontrada');
+                    }
+
+                    // Determinar el docente para la nota
+                    let nota_id_docente = id_docente;
+                    if (isAdmin) {
+                        const docenteMateria = await executeQuery(
+                            'SELECT id_docente FROM docente_materias WHERE id_materia = ? AND gestion = ? AND paralelo = ?',
+                            [inscripcion[0].id_materia, inscripcion[0].gestion, inscripcion[0].paralelo]
+                        );
+
+                        if (docenteMateria.length === 0) {
+                            throw new Error('No se encontró un docente asignado a la materia');
+                        }
+                        nota_id_docente = docenteMateria[0].id_docente;
+                    }
+
+                    // Verificar si la nota ya existe
+                    const notaExistente = await executeQuery(
                         'SELECT id_nota FROM notas WHERE id_inscripcion = ? AND id_tipo_evaluacion = ?',
                         [id_inscripcion, id_tipo_evaluacion]
                     );
 
-                    if (existente.length > 0) {
-                        throw new Error(`Nota ${i + 1}: Ya existe una nota de este tipo`);
-                    }
-
-                    // Registrar nota
-                    await executeQuery(
-                        'INSERT INTO notas (id_inscripcion, calificacion, id_tipo_evaluacion, id_docente, observaciones) VALUES (?, ?, ?, ?, ?)',
-                        [id_inscripcion, calificacion, id_tipo_evaluacion, id_docente, observaciones]
-                    );
-
-                    // Actualizar estado si es final
-                    // Obtener información del tipo de evaluación
-                    const tipoEvaluacion = await executeQuery(
-                        'SELECT * FROM tipos_evaluacion WHERE id_tipo_evaluacion = ?',
-                        [id_tipo_evaluacion]
-                    );
-
-                    if (tipoEvaluacion[0].nombre.toLowerCase().includes('final')) {
-                        const nuevoEstado = calificacion >= 51 ? 'aprobado' : 'reprobado';
+                    // Insertar o actualizar la nota
+                    if (notaExistente.length > 0) {
                         await executeQuery(
-                            'UPDATE inscripciones SET estado = ? WHERE id_inscripcion = ?',
-                            [nuevoEstado, id_inscripcion]
+                            'UPDATE notas SET calificacion = ?, observaciones = ?, id_docente = ?, fecha_actualizacion = CURRENT_TIMESTAMP WHERE id_nota = ?',
+                            [calificacion, observaciones, nota_id_docente, notaExistente[0].id_nota]
+                        );
+                    } else {
+                        await executeQuery(
+                            'INSERT INTO notas (id_inscripcion, calificacion, id_tipo_evaluacion, id_docente, observaciones) VALUES (?, ?, ?, ?, ?)',
+                            [id_inscripcion, calificacion, id_tipo_evaluacion, nota_id_docente, observaciones]
                         );
                     }
 
-                    resultados.exitosas++;
+                    // Agrupar para calcular nota final después
+                    if (!notasPorInscripcion[id_inscripcion]) {
+                        notasPorInscripcion[id_inscripcion] = {
+                            id_materia: inscripcion[0].id_materia,
+                            notas: []
+                        };
+                    }
+                    notasPorInscripcion[id_inscripcion].notas.push({
+                        id_tipo_evaluacion,
+                        calificacion
+                    });
 
+                    resultados.exitosas++;
                 } catch (error) {
                     resultados.fallidas++;
                     resultados.errores.push(error.message);
                 }
             }
 
-            // Auditar acción masiva
+            // Auditar acción
             await auditAction(req, 'notas', 'INSERT', null, null, {
                 tipo: 'registro_masivo',
                 total: notas.length,
                 exitosas: resultados.exitosas,
-                fallidas: resultados.fallidas,
-                id_docente
+                fallidas: resultados.fallidas
             });
 
             res.json({
@@ -685,32 +768,9 @@ class NotaController {
             next(error);
         }
     }
-}
 
-const controller = new NotaController();
 
-module.exports = {
-    listarNotas: controller.listarNotas.bind(controller),
-    obtenerNota: controller.obtenerNota.bind(controller),
-    crearNota: controller.registrarNota.bind(controller), // Corregido: usar registrarNota
-    registrarNota: controller.registrarNota.bind(controller),
-    actualizarNota: controller.actualizarNota.bind(controller),
-    eliminarNota: controller.eliminarNota.bind(controller),
-    obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
-    obtenerNotasPorInscripcion: controller.obtenerNotasPorInscripcion.bind(controller),
-    registroMasivo: controller.registroMasivo.bind(controller),
-    // Funciones adicionales que pueden faltar
-    registroMasivoNotas: async (req, res, next) => {
-        try {
-            res.json({ 
-                success: false, 
-                message: 'Funcionalidad de registro masivo de notas no implementada aún' 
-            });
-        } catch (error) {
-            next(error);
-        }
-    },
-    calcularPromedios: async (req, res, next) => {
+    async calcularPromedios(req, res, next) {
         try {
             const { id_inscripcion } = req.params;
             const query = `
@@ -734,4 +794,63 @@ module.exports = {
             next(error);
         }
     }
+    async obtenerNotasPorMateria(req, res, next) {
+        try {
+            const { id_materia } = req.params;
+
+            const query = `
+            SELECT 
+                n.id_nota,
+                n.calificacion,
+                n.id_tipo_evaluacion,
+                te.nombre as tipo_evaluacion_nombre,
+                te.porcentaje as tipo_evaluacion_porcentaje,
+                n.id_inscripcion,
+                i.gestion,
+                i.paralelo,
+                i.estado as estado_inscripcion,
+                e.id_estudiante,
+                e.nombre as estudiante_nombre,
+                e.apellido as estudiante_apellido,
+                e.ci as estudiante_ci,
+                m.id_materia,
+                m.nombre as materia_nombre,
+                m.sigla as materia_sigla
+            FROM notas n
+            INNER JOIN inscripciones i ON n.id_inscripcion = i.id_inscripcion
+            INNER JOIN estudiantes e ON i.id_estudiante = e.id_estudiante
+            INNER JOIN materias m ON i.id_materia = m.id_materia
+            INNER JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
+            WHERE m.id_materia = ?
+            ORDER BY e.apellido, e.nombre, te.orden
+        `;
+
+            const notas = await executeQuery(query, [id_materia]);
+
+            res.json({
+                success: true,
+                data: notas
+            });
+        } catch (error) {
+            next(error);
+        }
+    };
+}
+
+const controller = new NotaController();
+
+
+
+module.exports = {
+    listarNotas: controller.listarNotas.bind(controller),
+    obtenerNota: controller.obtenerNota.bind(controller),
+    crearNota: controller.registrarNota.bind(controller),
+    registrarNota: controller.registrarNota.bind(controller),
+    actualizarNota: controller.actualizarNota.bind(controller),
+    eliminarNota: controller.eliminarNota.bind(controller),
+    obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
+    obtenerNotasPorInscripcion: controller.obtenerNotasPorInscripcion.bind(controller),
+    obtenerNotasPorMateria: controller.obtenerNotasPorMateria.bind(controller),
+    registroMasivo: controller.registroMasivo.bind(controller),
+    calcularPromedios: controller.calcularPromedios.bind(controller),
 };

@@ -1,11 +1,14 @@
--- Sistema Académico - Schema de Base de Datos Corregido
--- Creación de tablas con estructura mejorada para MySQL
+-- Sistema Académico - Schema de Base de Datos
+-- Versión actualizada con migraciones integradas
 
 -- Eliminar tablas si existen (en orden inverso por dependencias)
+DROP TABLE IF EXISTS horarios;
+DROP TABLE IF EXISTS materias_prerequisitos;
 DROP TABLE IF EXISTS auditoria;
 DROP TABLE IF EXISTS sesiones;
 DROP TABLE IF EXISTS historial_academico;
 DROP TABLE IF EXISTS notas;
+DROP TABLE IF EXISTS tipos_evaluacion;
 DROP TABLE IF EXISTS inscripciones;
 DROP TABLE IF EXISTS docente_materias;
 DROP TABLE IF EXISTS materias;
@@ -24,9 +27,13 @@ DROP FUNCTION IF EXISTS ObtenerEstadisticasAuditoria;
 -- Eliminar triggers si existen
 DROP TRIGGER IF EXISTS tr_actualizar_historial_inscripcion;
 DROP TRIGGER IF EXISTS tr_actualizar_historial_nota;
+DROP TRIGGER IF EXISTS tr_cierre_materia_docente;
 DROP TRIGGER IF EXISTS auditoria_usuarios_update;
 
 -- Eliminar vistas si existen
+DROP VIEW IF EXISTS v_periodos;
+DROP VIEW IF EXISTS v_materias_prerequisitos;
+DROP VIEW IF EXISTS v_horarios_completos;
 DROP VIEW IF EXISTS vista_auditoria_detallada;
 
 -- Tabla de roles del sistema
@@ -40,7 +47,7 @@ CREATE TABLE roles (
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_nombre (nombre),
     INDEX idx_activo (activo)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de usuarios del sistema
 CREATE TABLE usuarios (
@@ -57,7 +64,7 @@ CREATE TABLE usuarios (
     INDEX idx_correo (correo),
     INDEX idx_activo (activo),
     INDEX idx_token_recuperacion (token_recuperacion)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de relación usuario-rol (muchos a muchos)
 CREATE TABLE usuario_roles (
@@ -69,7 +76,7 @@ CREATE TABLE usuario_roles (
     FOREIGN KEY (id_rol) REFERENCES roles(id_rol) ON DELETE CASCADE,
     INDEX idx_usuario (id_usuario),
     INDEX idx_rol (id_rol)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de menciones académicas
 CREATE TABLE menciones (
@@ -82,7 +89,7 @@ CREATE TABLE menciones (
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_nombre (nombre),
     INDEX idx_activo (activo)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de estudiantes
 CREATE TABLE estudiantes (
@@ -106,7 +113,7 @@ CREATE TABLE estudiantes (
     INDEX idx_estado (estado_academico),
     INDEX idx_usuario (id_usuario),
     INDEX idx_mencion (id_mencion)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de docentes
 CREATE TABLE docentes (
@@ -126,7 +133,7 @@ CREATE TABLE docentes (
     INDEX idx_nombre_apellido (nombre, apellido),
     INDEX idx_activo (activo),
     INDEX idx_usuario (id_usuario)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de materias
 CREATE TABLE materias (
@@ -144,72 +151,143 @@ CREATE TABLE materias (
     INDEX idx_semestre (semestre),
     INDEX idx_nombre (nombre),
     INDEX idx_activo (activo),
-    INDEX idx_mencion (id_mencion)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    INDEX idx_mencion (id_mencion),
+    INDEX idx_mencion_semestre (id_mencion, semestre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Tabla de relación docente-materia (muchos a muchos)
+-- Tabla de relación docente-materia con periodo y cierre
 CREATE TABLE docente_materias (
     id_docente INT,
     id_materia INT,
     gestion INT NOT NULL,
+    periodo INT NOT NULL DEFAULT 1 COMMENT '1: Primero, 2: Segundo, 3: Verano, 4: Invierno',
     paralelo VARCHAR(5) NOT NULL DEFAULT 'A',
+    cerrado BOOLEAN DEFAULT FALSE COMMENT 'Indica si la materia ha sido cerrada',
+    fecha_cierre TIMESTAMP NULL COMMENT 'Fecha y hora del cierre',
+    cerrado_por INT NULL COMMENT 'ID del usuario que cerró la materia',
     fecha_asignacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id_docente, id_materia, gestion, paralelo),
+    PRIMARY KEY (id_docente, id_materia, gestion, periodo, paralelo),
     FOREIGN KEY (id_docente) REFERENCES docentes(id_docente) ON DELETE CASCADE,
     FOREIGN KEY (id_materia) REFERENCES materias(id_materia) ON DELETE CASCADE,
+    FOREIGN KEY (cerrado_por) REFERENCES usuarios(id_usuario) ON DELETE SET NULL,
     INDEX idx_gestion (gestion),
     INDEX idx_paralelo (paralelo),
     INDEX idx_docente (id_docente),
-    INDEX idx_materia (id_materia)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    INDEX idx_materia (id_materia),
+    INDEX idx_cerrado (cerrado),
+    INDEX idx_gestion_periodo (gestion, periodo),
+    CONSTRAINT chk_periodo_dm CHECK (periodo BETWEEN 1 AND 4)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Tabla de inscripciones
+-- Tabla de inscripciones con periodo
 CREATE TABLE inscripciones (
     id_inscripcion INT PRIMARY KEY AUTO_INCREMENT,
     id_estudiante INT NOT NULL,
     id_materia INT NOT NULL,
     gestion VARCHAR(10) NOT NULL,
+    periodo INT NOT NULL DEFAULT 1 COMMENT '1: Primero, 2: Segundo, 3: Verano, 4: Invierno',
     paralelo VARCHAR(5) NOT NULL DEFAULT 'A',
     fecha_inscripcion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     estado ENUM('inscrito', 'aprobado', 'reprobado', 'abandonado') DEFAULT 'inscrito',
+    nota_final DECIMAL(5,2) NULL COMMENT 'Nota final calculada al cerrar la materia',
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE,
     FOREIGN KEY (id_materia) REFERENCES materias(id_materia) ON DELETE CASCADE,
-    UNIQUE KEY unique_estudiante_materia_gestion (id_estudiante, id_materia, gestion),
+    UNIQUE KEY unique_estudiante_materia_gestion_periodo (id_estudiante, id_materia, gestion, periodo),
     INDEX idx_gestion (gestion),
     INDEX idx_estado (estado),
     INDEX idx_fecha (fecha_inscripcion),
     INDEX idx_estudiante (id_estudiante),
     INDEX idx_materia (id_materia),
-    INDEX idx_paralelo (paralelo)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    INDEX idx_paralelo (paralelo),
+    INDEX idx_gestion_periodo (gestion, periodo),
+    INDEX idx_estudiante_estado (id_estudiante, estado),
+    CONSTRAINT chk_periodo_ins CHECK (periodo BETWEEN 1 AND 4)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabla de tipos de evaluación
+CREATE TABLE tipos_evaluacion (
+    id_tipo_evaluacion INT PRIMARY KEY AUTO_INCREMENT,
+    id_materia INT,
+    nombre VARCHAR(50),
+    porcentaje DECIMAL(5,2),
+    orden INT,
+    activo BOOLEAN DEFAULT true,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_materia) REFERENCES materias(id_materia),
+    INDEX idx_tipos_evaluacion_materia (id_materia),
+    INDEX idx_tipos_evaluacion_activo (activo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de notas
 CREATE TABLE notas (
     id_nota INT PRIMARY KEY AUTO_INCREMENT,
     id_inscripcion INT NOT NULL,
-    calificacion DECIMAL(4,2) NOT NULL,
-    tipo_evaluacion ENUM('parcial1', 'parcial2', 'final', 'segunda_instancia') NOT NULL,
+    calificacion DECIMAL(5,2) NOT NULL,
+    id_tipo_evaluacion INT NOT NULL,
     fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     id_docente INT NOT NULL,
     observaciones TEXT,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (id_inscripcion) REFERENCES inscripciones(id_inscripcion) ON DELETE CASCADE,
     FOREIGN KEY (id_docente) REFERENCES docentes(id_docente) ON DELETE RESTRICT,
+    FOREIGN KEY (id_tipo_evaluacion) REFERENCES tipos_evaluacion(id_tipo_evaluacion) ON DELETE RESTRICT,
     INDEX idx_calificacion (calificacion),
-    INDEX idx_tipo (tipo_evaluacion),
+    INDEX idx_tipo_evaluacion (id_tipo_evaluacion),
     INDEX idx_fecha (fecha_registro),
     INDEX idx_inscripcion (id_inscripcion),
     INDEX idx_docente (id_docente),
     CONSTRAINT chk_calificacion CHECK (calificacion >= 0 AND calificacion <= 100)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabla para prerrequisitos de materias
+CREATE TABLE materias_prerequisitos (
+    id_materia INT NOT NULL,
+    id_materia_prerequisito INT NOT NULL,
+    obligatorio BOOLEAN DEFAULT TRUE COMMENT 'Si es obligatorio o alternativo',
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_materia, id_materia_prerequisito),
+    FOREIGN KEY (id_materia) REFERENCES materias(id_materia) ON DELETE CASCADE,
+    FOREIGN KEY (id_materia_prerequisito) REFERENCES materias(id_materia) ON DELETE CASCADE,
+    INDEX idx_materia (id_materia),
+    INDEX idx_prerequisito (id_materia_prerequisito),
+    CONSTRAINT chk_no_self_prerequisite CHECK (id_materia != id_materia_prerequisito)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabla para horarios de clases
+CREATE TABLE horarios (
+    id_horario INT PRIMARY KEY AUTO_INCREMENT,
+    id_docente INT NOT NULL,
+    id_materia INT NOT NULL,
+    gestion INT NOT NULL,
+    periodo INT NOT NULL,
+    paralelo VARCHAR(5) NOT NULL DEFAULT 'A',
+    dia_semana ENUM('Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado') NOT NULL,
+    hora_inicio TIME NOT NULL,
+    hora_fin TIME NOT NULL,
+    aula VARCHAR(50),
+    modalidad ENUM('Presencial', 'Virtual', 'Híbrida') DEFAULT 'Presencial',
+    activo BOOLEAN DEFAULT TRUE,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_docente, id_materia, gestion, periodo, paralelo) 
+        REFERENCES docente_materias(id_docente, id_materia, gestion, periodo, paralelo) 
+        ON DELETE CASCADE,
+    INDEX idx_dia_hora (dia_semana, hora_inicio, hora_fin),
+    INDEX idx_aula (aula),
+    INDEX idx_docente_materia (id_docente, id_materia),
+    INDEX idx_gestion_periodo (gestion, periodo),
+    UNIQUE KEY unique_docente_horario (id_docente, gestion, periodo, dia_semana, hora_inicio),
+    UNIQUE KEY unique_aula_horario (aula, gestion, periodo, dia_semana, hora_inicio)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de historial académico
 CREATE TABLE historial_academico (
     id_historial INT PRIMARY KEY AUTO_INCREMENT,
     id_estudiante INT NOT NULL,
     gestion INT NOT NULL,
-    promedio DECIMAL(4,2) DEFAULT 0.00,
+    promedio DECIMAL(5,2) DEFAULT 0.00,
     materias_aprobadas INT DEFAULT 0,
     materias_reprobadas INT DEFAULT 0,
     materias_abandonadas INT DEFAULT 0,
@@ -224,7 +302,7 @@ CREATE TABLE historial_academico (
     INDEX idx_estudiante (id_estudiante),
     CONSTRAINT chk_promedio CHECK (promedio >= 0 AND promedio <= 100),
     CONSTRAINT chk_porcentaje CHECK (porcentaje_avance >= 0 AND porcentaje_avance <= 100)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de auditoría
 CREATE TABLE auditoria (
@@ -238,8 +316,6 @@ CREATE TABLE auditoria (
     ip_address VARCHAR(45) NULL,
     user_agent TEXT NULL,
     fecha_accion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Índices para mejorar el rendimiento
     INDEX idx_usuario (id_usuario),
     INDEX idx_tabla (tabla_afectada),
     INDEX idx_accion (accion),
@@ -248,10 +324,8 @@ CREATE TABLE auditoria (
     INDEX idx_auditoria_usuario_fecha (id_usuario, fecha_accion),
     INDEX idx_auditoria_tabla_fecha (tabla_afectada, fecha_accion),
     INDEX idx_auditoria_accion_fecha (accion, fecha_accion),
-    
-    -- Clave foránea opcional
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de sesiones (para manejo de JWT)
 CREATE TABLE sesiones (
@@ -268,193 +342,56 @@ CREATE TABLE sesiones (
     INDEX idx_usuario (id_usuario),
     INDEX idx_expiracion (fecha_expiracion),
     INDEX idx_activo (activo)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Procedimiento almacenado para actualizar historial académico
-DELIMITER //
+-- Vista para periodos
+CREATE VIEW v_periodos AS
+SELECT 1 as id, 'Primero' as nombre
+UNION SELECT 2, 'Segundo'
+UNION SELECT 3, 'Verano'
+UNION SELECT 4, 'Invierno';
 
-CREATE PROCEDURE sp_actualizar_historial_academico(
-    IN p_id_estudiante INT,
-    IN p_gestion INT
-)
-BEGIN
-    DECLARE v_promedio DECIMAL(4,2) DEFAULT 0.00;
-    DECLARE v_aprobadas INT DEFAULT 0;
-    DECLARE v_reprobadas INT DEFAULT 0;
-    DECLARE v_abandonadas INT DEFAULT 0;
-    DECLARE v_total INT DEFAULT 0;
-    DECLARE v_porcentaje DECIMAL(5,2) DEFAULT 0.00;
-    DECLARE v_materias_requeridas INT DEFAULT 0;
-    
-    -- Calcular estadísticas
-    SELECT 
-        COUNT(CASE WHEN i.estado = 'aprobado' THEN 1 END),
-        COUNT(CASE WHEN i.estado = 'reprobado' THEN 1 END),
-        COUNT(CASE WHEN i.estado = 'abandonado' THEN 1 END),
-        COUNT(*)
-    INTO v_aprobadas, v_reprobadas, v_abandonadas, v_total
-    FROM inscripciones i
-    WHERE i.id_estudiante = p_id_estudiante AND i.gestion = p_gestion;
-    
-    -- Calcular promedio de notas finales
-    SELECT COALESCE(AVG(n.calificacion), 0)
-    INTO v_promedio
-    FROM notas n
-    INNER JOIN inscripciones i ON n.id_inscripcion = i.id_inscripcion
-    WHERE i.id_estudiante = p_id_estudiante 
-    AND i.gestion = p_gestion 
-    AND n.tipo_evaluacion = 'final'
-    AND i.estado = 'aprobado';
-    
-    -- Obtener materias requeridas para la mención
-    SELECT COALESCE(m.materias_requeridas, 0)
-    INTO v_materias_requeridas
-    FROM estudiantes e
-    LEFT JOIN menciones m ON e.id_mencion = m.id_mencion
-    WHERE e.id_estudiante = p_id_estudiante;
-    
-    -- Calcular porcentaje de avance
-    IF v_materias_requeridas > 0 THEN
-        SET v_porcentaje = (v_aprobadas * 100.0) / v_materias_requeridas;
-    END IF;
-    
-    -- Insertar o actualizar historial
-    INSERT INTO historial_academico (
-        id_estudiante, gestion, promedio, materias_aprobadas,
-        materias_reprobadas, materias_abandonadas, total_materias,
-        porcentaje_avance
-    ) VALUES (
-        p_id_estudiante, p_gestion, v_promedio, v_aprobadas,
-        v_reprobadas, v_abandonadas, v_total, v_porcentaje
-    )
-    ON DUPLICATE KEY UPDATE
-        promedio = v_promedio,
-        materias_aprobadas = v_aprobadas,
-        materias_reprobadas = v_reprobadas,
-        materias_abandonadas = v_abandonadas,
-        total_materias = v_total,
-        porcentaje_avance = v_porcentaje,
-        fecha_actualizacion = CURRENT_TIMESTAMP;
-        
-END//
+-- Vista para consultar prerrequisitos con información completa
+CREATE VIEW v_materias_prerequisitos AS
+SELECT 
+    m.id_materia,
+    m.nombre as materia_nombre,
+    m.sigla as materia_sigla,
+    m.semestre as materia_semestre,
+    mp.id_materia_prerequisito,
+    mp2.nombre as prerequisito_nombre,
+    mp2.sigla as prerequisito_sigla,
+    mp2.semestre as prerequisito_semestre,
+    mp.obligatorio,
+    mp.fecha_creacion
+FROM materias m
+INNER JOIN materias_prerequisitos mp ON m.id_materia = mp.id_materia
+INNER JOIN materias mp2 ON mp.id_materia_prerequisito = mp2.id_materia
+ORDER BY m.semestre, m.nombre, mp2.semestre, mp2.nombre;
 
-DELIMITER ;
+-- Vista para consultar horarios con información completa
+CREATE VIEW v_horarios_completos AS
+SELECT 
+    h.*,
+    m.nombre as materia_nombre,
+    m.sigla as materia_sigla,
+    m.semestre,
+    CONCAT(d.nombre, ' ', d.apellido) as docente_nombre,
+    men.nombre as mencion_nombre,
+    CASE 
+        WHEN h.periodo = 1 THEN 'Primero'
+        WHEN h.periodo = 2 THEN 'Segundo'
+        WHEN h.periodo = 3 THEN 'Verano'
+        WHEN h.periodo = 4 THEN 'Invierno'
+    END as periodo_nombre
+FROM horarios h
+INNER JOIN materias m ON h.id_materia = m.id_materia
+INNER JOIN docentes d ON h.id_docente = d.id_docente
+INNER JOIN menciones men ON m.id_mencion = men.id_mencion
+WHERE h.activo = TRUE
+ORDER BY h.gestion DESC, h.periodo, h.dia_semana, h.hora_inicio;
 
--- Triggers para actualizar historial académico automáticamente
-DELIMITER //
-
--- Trigger para actualizar historial cuando se actualiza una inscripción
-CREATE TRIGGER tr_actualizar_historial_inscripcion
-AFTER UPDATE ON inscripciones
-FOR EACH ROW
-BEGIN
-    IF OLD.estado != NEW.estado THEN
-        CALL sp_actualizar_historial_academico(NEW.id_estudiante, NEW.gestion);
-    END IF;
-END//
-
--- Trigger para actualizar historial cuando se registra/actualiza una nota
-CREATE TRIGGER tr_actualizar_historial_nota
-AFTER INSERT ON notas
-FOR EACH ROW
-BEGIN
-    DECLARE v_gestion INT;
-    DECLARE v_estudiante INT;
-    
-    SELECT i.gestion, i.id_estudiante 
-    INTO v_gestion, v_estudiante
-    FROM inscripciones i 
-    WHERE i.id_inscripcion = NEW.id_inscripcion;
-    
-    CALL sp_actualizar_historial_academico(v_estudiante, v_gestion);
-END//
-
-DELIMITER ;
-
--- Procedimiento almacenado para limpiar logs antiguos
-DELIMITER //
-CREATE PROCEDURE LimpiarAuditoriaAntigua(IN dias_antiguedad INT)
-BEGIN
-    DECLARE registros_eliminados INT DEFAULT 0;
-    
-    -- Validar que no se eliminen logs muy recientes
-    IF dias_antiguedad < 30 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'No se pueden eliminar logs con menos de 30 días de antigüedad';
-    END IF;
-    
-    -- Eliminar registros antiguos
-    DELETE FROM auditoria 
-    WHERE fecha_accion < DATE_SUB(NOW(), INTERVAL dias_antiguedad DAY);
-    
-    -- Obtener número de registros eliminados
-    SET registros_eliminados = ROW_COUNT();
-    
-    -- Registrar la limpieza en la auditoría
-    INSERT INTO auditoria (tabla_afectada, accion, valores_nuevos, ip_address, user_agent)
-    VALUES ('auditoria', 'DELETE', 
-            JSON_OBJECT('registros_eliminados', registros_eliminados, 'dias_antiguedad', dias_antiguedad),
-            '127.0.0.1', 'Procedimiento de limpieza automática');
-    
-    -- Retornar resultado
-    SELECT registros_eliminados as registros_eliminados;
-END //
-DELIMITER ;
-
--- Función para obtener estadísticas de auditoría
-DELIMITER //
-CREATE FUNCTION ObtenerEstadisticasAuditoria(fecha_inicio DATE, fecha_fin DATE)
-RETURNS JSON
-READS SQL DATA
-DETERMINISTIC
-BEGIN
-    DECLARE resultado JSON DEFAULT '{}';
-    DECLARE total_acciones INT DEFAULT 0;
-    
-    -- Obtener total de acciones
-    SELECT COUNT(*) INTO total_acciones
-    FROM auditoria 
-    WHERE fecha_accion BETWEEN fecha_inicio AND fecha_fin;
-    
-    -- Construir JSON con estadísticas básicas
-    SET resultado = JSON_OBJECT(
-        'total_acciones', total_acciones,
-        'periodo', JSON_OBJECT(
-            'inicio', fecha_inicio,
-            'fin', fecha_fin
-        )
-    );
-    
-    RETURN resultado;
-END //
-DELIMITER ;
-
--- Trigger para auditar cambios en la tabla usuarios
-DELIMITER //
-CREATE TRIGGER auditoria_usuarios_update
-AFTER UPDATE ON usuarios
-FOR EACH ROW
-BEGIN
-    INSERT INTO auditoria (
-        id_usuario, tabla_afectada, accion, id_registro,
-        valores_anteriores, valores_nuevos, ip_address, user_agent
-    ) VALUES (
-        NEW.id_usuario, 'usuarios', 'UPDATE', NEW.id_usuario,
-        JSON_OBJECT(
-            'correo', OLD.correo,
-            'activo', OLD.activo,
-            'ultimo_acceso', OLD.ultimo_acceso
-        ),
-        JSON_OBJECT(
-            'correo', NEW.correo,
-            'activo', NEW.activo,
-            'ultimo_acceso', NEW.ultimo_acceso
-        ),
-        '127.0.0.1', 'Trigger automático'
-    );
-END //
-DELIMITER ;
-
--- Crear vista para consultas frecuentes de auditoría
+-- Vista para auditoría detallada
 CREATE VIEW vista_auditoria_detallada AS
 SELECT 
     a.id_auditoria,
@@ -482,18 +419,4 @@ LEFT JOIN estudiantes e ON u.id_usuario = e.id_usuario
 LEFT JOIN docentes d ON u.id_usuario = d.id_usuario
 ORDER BY a.fecha_accion DESC;
 
--- Insertar algunos registros de ejemplo para pruebas
-INSERT INTO auditoria (id_usuario, tabla_afectada, accion, valores_nuevos, ip_address, user_agent) VALUES
-(NULL, 'sistema', 'INSERT', JSON_OBJECT('mensaje', 'Inicialización del sistema de auditoría'), '127.0.0.1', 'Sistema');
 
--- Comentarios adicionales sobre el schema
--- Correcciones aplicadas:
--- 1. Eliminado "USE sew;" - se debe especificar la base de datos al conectar
--- 2. Removido CREATE OR REPLACE VIEW (no soportado en MySQL, usar CREATE VIEW)
--- 3. Simplificada la función ObtenerEstadisticasAuditoria para evitar subconsultas complejas
--- 4. Añadido NOT NULL a campos de fecha que lo requerían
--- 5. Movidos todos los índices adicionales a la definición de la tabla auditoria
--- 6. Corregido el trigger para obtener correctamente id_estudiante y gestion
--- 7. Removidos comentarios ALTER TABLE para modificar comentarios (opcionales en MySQL)
-
-SELECT 'Schema corregido e instalado correctamente' as mensaje;

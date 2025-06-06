@@ -90,6 +90,11 @@ export const dataService = {
     obtenerDocentes: (id) => api.get(`/materias/${id}/docentes`),
     obtenerParalelos: (id) => api.get(`/materias/${id}/paralelos`),
     
+    // Gestión de cierre de materias
+    obtenerEstadoCierre: (parametros = {}) => api.get('/materias/estado-cierre', { params: parametros }),
+    cerrar: (id, datos) => api.post(`/materias/${id}/cerrar`, datos),
+    abrir: (id, datos) => api.post(`/materias/${id}/abrir`, datos),
+    
     // Métodos de compatibilidad
     getAll: (params = {}) => api.get('/materias', { params }),
     getById: (id) => api.get(`/materias/${id}`),
@@ -133,6 +138,7 @@ export const dataService = {
     // Operaciones CRUD básicas
     obtenerTodas: (parametros = {}) => api.get('/inscripciones', { params: parametros }),
     obtenerPorId: (id) => api.get(`/inscripciones/${id}`),
+    obtenerDetalle: (id) => api.get(`/inscripciones/${id}/detalle`),
     crear: (datos) => api.post('/inscripciones', datos),
     actualizar: (id, datos) => api.put(`/inscripciones/${id}`, datos),
     eliminar: (id) => api.delete(`/inscripciones/${id}`),
@@ -214,7 +220,7 @@ export const dataService = {
   // Gestión de Tipos de Evaluación
   tiposEvaluacion: {
     // Operaciones CRUD básicas
-    obtenerTodos: (idMateria, parametros = {}) => api.get(`/tipos-evaluacion/materia/${idMateria}`, { params: parametros }),
+    obtenerPorMateria: (idMateria, parametros = {}) => api.get(`/tipos-evaluacion/materia/${idMateria}`, { params: parametros }),
     obtenerPorId: (idMateria, idTipoEvaluacion) => api.get(`/tipos-evaluacion/materia/${idMateria}/${idTipoEvaluacion}`),
     crear: (idMateria, datos) => api.post(`/tipos-evaluacion/materia/${idMateria}`, datos),
     actualizar: (idMateria, idTipoEvaluacion, datos) => api.put(`/tipos-evaluacion/materia/${idMateria}/${idTipoEvaluacion}`, datos),
@@ -246,6 +252,53 @@ export const dataService = {
     getLogs: (params = {}) => api.get('/auditoria', { params }),
     getEstadisticas: (params = {}) => api.get('/auditoria/estadisticas', { params }),
     exportar: (params = {}) => api.get('/auditoria/exportar', { params, responseType: 'blob' })
+  },
+
+  // Gestión de Prerrequisitos
+  prerequisitos: {
+    // Operaciones básicas
+    obtenerPorMateria: (idMateria) => api.get(`/prerequisitos/materias/${idMateria}`),
+    agregar: (idMateria, datos) => api.post(`/prerequisitos/materias/${idMateria}`, datos),
+    eliminar: (idMateria, idPrerequisito) => api.delete(`/prerequisitos/materias/${idMateria}/${idPrerequisito}`),
+    
+    // Verificaciones
+    verificarEstudiante: (idEstudiante, idMateria) => api.get(`/prerequisitos/verificar/${idEstudiante}/${idMateria}`),
+    materiasDisponibles: (idEstudiante) => api.get(`/prerequisitos/materias-disponibles/${idEstudiante}`),
+    obtenerArbol: (idMateria) => api.get(`/prerequisitos/arbol/${idMateria}`),
+    
+    // Métodos de compatibilidad
+    getByMateria: (materiaId) => api.get(`/prerequisitos/materias/${materiaId}`),
+    add: (materiaId, data) => api.post(`/prerequisitos/materias/${materiaId}`, data),
+    delete: (materiaId, prerequisitoId) => api.delete(`/prerequisitos/materias/${materiaId}/${prerequisitoId}`),
+    verify: (estudianteId, materiaId) => api.get(`/prerequisitos/verificar/${estudianteId}/${materiaId}`),
+    getAvailableSubjects: (estudianteId) => api.get(`/prerequisitos/materias-disponibles/${estudianteId}`),
+    getTree: (materiaId) => api.get(`/prerequisitos/arbol/${materiaId}`)
+  },
+
+  // Gestión de Horarios
+  horarios: {
+    // Operaciones CRUD básicas
+    obtenerTodos: (parametros = {}) => api.get('/horarios', { params: parametros }),
+    obtenerPorId: (id) => api.get(`/horarios/${id}`),
+    crear: (datos) => api.post('/horarios', datos),
+    actualizar: (id, datos) => api.put(`/horarios/${id}`, datos),
+    eliminar: (id) => api.delete(`/horarios/${id}`),
+    
+    // Operaciones específicas
+    obtenerHorarioEstudiante: (idEstudiante, parametros = {}) => api.get(`/horarios/estudiante/${idEstudiante}`, { params: parametros }),
+    verificarConflictos: (idEstudiante, idMateria, parametros = {}) => api.get(`/horarios/verificar-conflictos/${idEstudiante}/${idMateria}`, { params: parametros }),
+    obtenerPorMateria: (idMateria, parametros = {}) => api.get('/horarios', { params: { ...parametros, id_materia: idMateria } }),
+    obtenerPorDocente: (idDocente, parametros = {}) => api.get('/horarios', { params: { ...parametros, id_docente: idDocente } }),
+    obtenerPorAula: (aula, parametros = {}) => api.get('/horarios', { params: { ...parametros, aula } }),
+    
+    // Métodos de compatibilidad
+    getAll: (params = {}) => api.get('/horarios', { params }),
+    getById: (id) => api.get(`/horarios/${id}`),
+    create: (data) => api.post('/horarios', data),
+    update: (id, data) => api.put(`/horarios/${id}`, data),
+    delete: (id) => api.delete(`/horarios/${id}`),
+    getStudentSchedule: (studentId, params = {}) => api.get(`/horarios/estudiante/${studentId}`, { params }),
+    checkConflicts: (studentId, subjectId, params = {}) => api.get(`/horarios/verificar-conflictos/${studentId}/${subjectId}`, { params })
   }
 };
 
@@ -259,5 +312,7 @@ export const {
   notas,
   reportes,
   auditoria,
-  tiposEvaluacion
+  tiposEvaluacion,
+  prerequisitos,
+  horarios
 } = dataService;

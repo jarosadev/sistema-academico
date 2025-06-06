@@ -26,6 +26,14 @@
     @apply bg-secondary-100 text-secondary-900 hover:bg-secondary-200 active:bg-secondary-300;
   }
   
+  .btn-success {
+    @apply bg-green-600 text-white hover:bg-green-700 active:bg-green-800;
+  }
+  
+  .btn-warning {
+    @apply bg-yellow-400 text-white hover:bg-yellow-500 active:bg-yellow-600;
+  }
+  
   .btn-danger {
     @apply bg-red-600 text-white hover:bg-red-700 active:bg-red-800;
   }

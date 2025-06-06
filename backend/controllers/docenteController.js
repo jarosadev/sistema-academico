@@ -1,6 +1,7 @@
 const { executeQuery } = require('../config/database');
 const { createError } = require('../middleware/errorHandler');
 const { auditAction } = require('../middleware/audit-complete');
+const bcrypt = require('bcrypt');
 
 /**
  * Controlador para gestión de docentes
@@ -186,14 +187,31 @@ class DocenteController {
                 throw createError('El correo electrónico ya está registrado', 409);
             }
 
-            // Crear usuario
+            // Verificar que la contraseña esté proporcionada
+            if (!req.body.password) {
+                throw createError('La contraseña es obligatoria para crear un usuario', 400);
+            }
+
+            // Hashear la contraseña
+            const saltRounds = 10;
+            const hashedPassword = await bcrypt.hash(req.body.password, saltRounds);
+
+            // Crear usuario con correo, password y activo
             const usuarioQuery = `
-                INSERT INTO usuarios (correo, rol, activo)
-                VALUES (?, 'DOCENTE', TRUE)
+                INSERT INTO usuarios (correo, password, activo)
+                VALUES (?, ?, TRUE)
             `;
 
-            const usuarioResult = await executeQuery(usuarioQuery, [correo]);
+            const usuarioResult = await executeQuery(usuarioQuery, [correo, hashedPassword]);
             const id_usuario = usuarioResult.insertId;
+
+            // Asignar rol docente en usuario_roles
+            const rolDocenteId = 2; // id_rol for 'docente' role from seeds.sql
+            const usuarioRolQuery = `
+                INSERT INTO usuario_roles (id_usuario, id_rol)
+                VALUES (?, ?)
+            `;
+            await executeQuery(usuarioRolQuery, [id_usuario, rolDocenteId]);
 
             // Crear docente
             const docenteQuery = `
@@ -300,6 +318,16 @@ class DocenteController {
                 await executeQuery(
                     'UPDATE usuarios SET activo = ? WHERE id_usuario = ?',
                     [activo, docente.id_usuario]
+                );
+            }
+
+            // Actualizar password si se proporciona
+            if (req.body.password) {
+                const saltRounds = 10;
+                const hashedPassword = await bcrypt.hash(req.body.password, saltRounds);
+                await executeQuery(
+                    'UPDATE usuarios SET password = ? WHERE id_usuario = ?',
+                    [hashedPassword, docente.id_usuario]
                 );
             }
 
@@ -424,7 +452,12 @@ class DocenteController {
     async asignarMateria(req, res, next) {
         try {
             const { id } = req.params;
-            const { id_materia, gestion, paralelo = 'A' } = req.body;
+            const { id_materia, gestion, periodo = 1, paralelo = 'A' } = req.body;
+
+            // Validar periodo
+            if (periodo < 1 || periodo > 4) {
+                throw createError('Periodo inválido. Debe ser: 1 (Primero), 2 (Segundo), 3 (Verano) o 4 (Invierno)', 400);
+            }
 
             // Verificar que el docente existe y está activo
             const docenteExistente = await executeQuery(
@@ -448,41 +481,42 @@ class DocenteController {
 
             // Verificar que no esté ya asignada al mismo docente
             const asignacionExistente = await executeQuery(
-                'SELECT * FROM docente_materias WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND paralelo = ?',
-                [id, id_materia, gestion, paralelo]
+                'SELECT * FROM docente_materias WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?',
+                [id, id_materia, gestion, periodo, paralelo]
             );
 
             if (asignacionExistente.length > 0) {
-                throw createError('El docente ya tiene asignada esta materia en esta gestión y paralelo', 409);
+                throw createError('El docente ya tiene asignada esta materia en esta gestión, periodo y paralelo', 409);
             }
 
-            // Verificar que otro docente no tenga asignada la misma materia-paralelo
+            // Verificar que otro docente no tenga asignada la misma materia-paralelo-periodo
             const asignacionOtroDocente = await executeQuery(
                 'SELECT d.nombre, d.apellido FROM docente_materias dm ' +
                 'INNER JOIN docentes d ON dm.id_docente = d.id_docente ' +
-                'WHERE dm.id_materia = ? AND dm.gestion = ? AND dm.paralelo = ?',
-                [id_materia, gestion, paralelo]
+                'WHERE dm.id_materia = ? AND dm.gestion = ? AND dm.periodo = ? AND dm.paralelo = ?',
+                [id_materia, gestion, periodo, paralelo]
             );
 
             if (asignacionOtroDocente.length > 0) {
                 const docente = asignacionOtroDocente[0];
+                const periodoNombre = ['', 'Primero', 'Segundo', 'Verano', 'Invierno'][periodo];
                 throw createError(
-                    `La materia ya está asignada al docente ${docente.nombre} ${docente.apellido} en el paralelo ${paralelo}`,
+                    `La materia ya está asignada al docente ${docente.nombre} ${docente.apellido} en el paralelo ${paralelo} para ${periodoNombre}`,
                     409
                 );
             }
 
             // Crear asignación
             const query = `
-                INSERT INTO docente_materias (id_docente, id_materia, gestion, paralelo)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO docente_materias (id_docente, id_materia, gestion, periodo, paralelo)
+                VALUES (?, ?, ?, ?, ?)
             `;
 
-            await executeQuery(query, [id, id_materia, gestion, paralelo]);
+            await executeQuery(query, [id, id_materia, gestion, periodo, paralelo]);
 
             // Auditar acción
             await auditAction(req, 'docente_materias', 'INSERT', null, null, {
-                id_docente: id, id_materia, gestion, paralelo
+                id_docente: id, id_materia, gestion, periodo, paralelo
             });
 
             res.status(201).json({
@@ -492,6 +526,7 @@ class DocenteController {
                     id_docente: parseInt(id),
                     id_materia: parseInt(id_materia),
                     gestion: parseInt(gestion),
+                    periodo: parseInt(periodo),
                     paralelo
                 }
             });
@@ -507,16 +542,21 @@ class DocenteController {
     async removerMateria(req, res, next) {
         try {
             const { id, id_materia } = req.params;
-            const { gestion, paralelo = 'A' } = req.query;
+            const { gestion, periodo = 1, paralelo = 'A' } = req.query;
 
             // Verificar que la asignación existe
             const asignacionExistente = await executeQuery(
-                'SELECT * FROM docente_materias WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND paralelo = ?',
-                [id, id_materia, gestion, paralelo]
+                'SELECT * FROM docente_materias WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?',
+                [id, id_materia, gestion, periodo, paralelo]
             );
 
             if (asignacionExistente.length === 0) {
                 throw createError('Asignación no encontrada', 404);
+            }
+
+            // Verificar que no esté cerrada
+            if (asignacionExistente[0].cerrado) {
+                throw createError('No se puede remover una asignación cerrada. Debe reabrirla primero.', 400);
             }
 
             // Verificar que no haya notas registradas
@@ -524,8 +564,8 @@ class DocenteController {
                 SELECT COUNT(*) as total 
                 FROM notas n
                 INNER JOIN inscripciones i ON n.id_inscripcion = i.id_inscripcion
-                WHERE i.id_materia = ? AND i.gestion = ? AND n.id_docente = ?
-            `, [id_materia, gestion, id]);
+                WHERE i.id_materia = ? AND i.gestion = ? AND i.periodo = ? AND n.id_docente = ?
+            `, [id_materia, gestion, periodo, id]);
 
             if (notasExistentes[0].total > 0) {
                 throw createError('No se puede remover la asignación porque ya hay notas registradas', 400);
@@ -534,10 +574,10 @@ class DocenteController {
             // Remover asignación
             const query = `
                 DELETE FROM docente_materias 
-                WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND paralelo = ?
+                WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?
             `;
 
-            await executeQuery(query, [id, id_materia, gestion, paralelo]);
+            await executeQuery(query, [id, id_materia, gestion, periodo, paralelo]);
 
             // Auditar acción
             await auditAction(req, 'docente_materias', 'DELETE', null, asignacionExistente[0], null);
@@ -562,16 +602,30 @@ class DocenteController {
                 SELECT 
                     m.*,
                     dm.gestion,
+                    dm.periodo,
                     dm.paralelo,
+                    dm.cerrado,
+                    dm.fecha_cierre,
                     men.nombre as mencion_nombre,
-                    COUNT(DISTINCT i.id_inscripcion) as estudiantes_inscritos
+                    COUNT(DISTINCT i.id_inscripcion) as estudiantes_inscritos,
+                    u.correo as cerrado_por_correo,
+                    CASE 
+                        WHEN dm.periodo = 1 THEN 'Primero'
+                        WHEN dm.periodo = 2 THEN 'Segundo'
+                        WHEN dm.periodo = 3 THEN 'Verano'
+                        WHEN dm.periodo = 4 THEN 'Invierno'
+                    END as periodo_nombre
                 FROM docente_materias dm
                 INNER JOIN materias m ON dm.id_materia = m.id_materia
                 INNER JOIN menciones men ON m.id_mencion = men.id_mencion
-                LEFT JOIN inscripciones i ON m.id_materia = i.id_materia AND i.gestion = dm.gestion
+                LEFT JOIN inscripciones i ON m.id_materia = i.id_materia 
+                    AND i.gestion = dm.gestion 
+                    AND i.periodo = dm.periodo
+                    AND i.paralelo = dm.paralelo
+                LEFT JOIN usuarios u ON dm.cerrado_por = u.id_usuario
                 WHERE dm.id_docente = ?
-                GROUP BY m.id_materia, dm.gestion, dm.paralelo
-                ORDER BY dm.gestion DESC, m.semestre, m.nombre
+                GROUP BY m.id_materia, dm.gestion, dm.periodo, dm.paralelo, dm.cerrado, dm.fecha_cierre, men.nombre, u.correo
+                ORDER BY dm.gestion DESC, dm.periodo DESC, m.semestre, m.nombre
             `;
             const materias = await executeQuery(query, [id]);
             res.json({ success: true, data: materias });

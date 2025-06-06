@@ -238,7 +238,6 @@ const DocenteForm = ({ docente, onSubmit, onCancel, isEdit = false, especialidad
           <li>• El docente podrá acceder al sistema con el correo y contraseña proporcionados</li>
           <li>• La especialidad ayudará en la asignación de materias apropiadas</li>
           <li>• La fecha de contratación se usa para reportes y estadísticas</li>
-          {isEdit && <li>• Los cambios en CI y correo requieren validación adicional</li>}
         </ul>
       </div>
 

@@ -23,6 +23,7 @@ import TiposEvaluacionPage from './pages/admin/TiposEvaluacionPage';
 import InscripcionesPage from './pages/admin/InscripcionesPage';
 import NotasPage from './pages/admin/NotasPage';
 import AuditoriaPage from './pages/admin/AuditoriaPage';
+import CierreMateriasPage from './pages/admin/CierreMateriasPage';
 
 import EstudiantesPorMateriaPage from './pages/admin/EstudiantesPorMateriaPage';
 
@@ -147,6 +148,14 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
                     <AuditoriaPage/>
+                  </RoleBasedRoute>
+                } 
+              />
+              <Route 
+                path="cierre-materias" 
+                element={
+                  <RoleBasedRoute allowedRoles={['administrador']} showUnauthorized>
+                    <CierreMateriasPage/>
                   </RoleBasedRoute>
                 } 
               />

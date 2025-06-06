@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Book, BookOpen, BookX, Edit, Trash2, Eye, ClipboardList, Users } from 'lucide-react';
+import { Plus, Search, Book, BookOpen, BookX, Edit, Trash2, Eye, ClipboardList, Users, GitBranch, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { dataService } from '../../services/dataService';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -12,6 +12,8 @@ import Modal from '../../components/ui/ModalImproved';
 import Loading from '../../components/ui/Loading';
 import MateriaForm from '../../components/admin/MateriaForm';
 import MateriaDetalle from '../../components/admin/MateriaDetalle';
+import PrerequisitosModal from '../../components/admin/PrerequisitosModal';
+import HorariosModal from '../../components/admin/HorariosModal';
 
 const MateriasPage = () => {
   const navigate = useNavigate();
@@ -22,6 +24,8 @@ const MateriasPage = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showPrerequisitosModal, setShowPrerequisitosModal] = useState(false);
+  const [showHorariosModal, setShowHorariosModal] = useState(false);
   const [selectedMateria, setSelectedMateria] = useState(null);
   
   // Estados para filtros y paginación
@@ -203,53 +207,75 @@ const MateriasPage = () => {
     {
       key: 'acciones',
       title: 'Acciones',
-      render: (materia) => (
-        <div className="flex space-x-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              setSelectedMateria(materia);
-              setShowDetailModal(true);
-            }}
-          >
-            <Eye className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              setSelectedMateria(materia);
-              setShowEditModal(true);
-            }}
-          >
-            <Edit className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => navigate(`/materias/${materia.id_materia}/tipos-evaluacion`)}
-            title="Gestionar tipos de evaluación"
-          >
-            <ClipboardList className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => navigate(`/materias/${materia.id_materia}/estudiantes`)}
-            title="Ver estudiantes inscritos"
-          >
-            <Users className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="danger"
-            onClick={() => handleEliminarMateria(materia)}
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      )
+render: (materia) => (
+  <div className="grid grid-cols-4 gap-1 sm:flex sm:flex-row sm:gap-2">
+    <Button
+      size="sm"
+      variant="secondary"
+      onClick={() => {
+        setSelectedMateria(materia);
+        setShowDetailModal(true);
+      }}
+    >
+      <Eye className="w-4 h-4" />
+    </Button>
+    <Button
+      size="sm"
+      variant="secondary"
+      onClick={() => {
+        setSelectedMateria(materia);
+        setShowEditModal(true);
+      }}
+    >
+      <Edit className="w-4 h-4" />
+    </Button>
+    <Button
+      size="sm"
+      variant="secondary"
+      onClick={() => {
+        setSelectedMateria(materia);
+        setShowPrerequisitosModal(true);
+      }}
+      title="Gestionar prerrequisitos"
+    >
+      <GitBranch className="w-4 h-4" />
+    </Button>
+    <Button
+      size="sm"
+      variant="secondary"
+      onClick={() => {
+        setSelectedMateria(materia);
+        setShowHorariosModal(true);
+      }}
+      title="Gestionar horarios"
+    >
+      <Clock className="w-4 h-4" />
+    </Button>
+    <Button
+      size="sm"
+      variant="secondary"
+      onClick={() => navigate(`/materias/${materia.id_materia}/tipos-evaluacion`)}
+      title="Gestionar tipos de evaluación"
+    >
+      <ClipboardList className="w-4 h-4" />
+    </Button>
+    <Button
+      size="sm"
+      variant="secondary"
+      onClick={() => navigate(`/materias/${materia.id_materia}/estudiantes`)}
+      title="Ver estudiantes inscritos"
+    >
+      <Users className="w-4 h-4" />
+    </Button>
+    <Button
+      size="sm"
+      variant="danger"
+      onClick={() => handleEliminarMateria(materia)}
+    >
+      <Trash2 className="w-4 h-4" />
+    </Button>
+  </div>
+)
     }
   ];
 
@@ -449,6 +475,30 @@ const MateriasPage = () => {
           />
         )}
       </Modal>
+
+      {/* Modal de Prerrequisitos */}
+      {selectedMateria && (
+        <PrerequisitosModal
+          isOpen={showPrerequisitosModal}
+          onClose={() => {
+            setShowPrerequisitosModal(false);
+            setSelectedMateria(null);
+          }}
+          materia={selectedMateria}
+        />
+      )}
+
+      {/* Modal de Horarios */}
+      {selectedMateria && (
+        <HorariosModal
+          isOpen={showHorariosModal}
+          onClose={() => {
+            setShowHorariosModal(false);
+            setSelectedMateria(null);
+          }}
+          materia={selectedMateria}
+        />
+      )}
     </div>
   );
 };

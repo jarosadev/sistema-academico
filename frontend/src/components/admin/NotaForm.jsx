@@ -2,18 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { dataService } from '../../services/dataService';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import SearchableSelect from '../ui/SearchableSelect';
 import { useFormValidation, commonRules } from '../../utils/validation';
+import { notificationService } from '../../services/notificationService';
 
 const NotaForm = ({ nota, onSubmit, onCancel, isEdit = false }) => {
-  const [inscripciones, setInscripciones] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     id_inscripcion: '',
     calificacion: 0,
-    tipo_evaluacion: 'parcial1',
+    id_tipo_evaluacion: '',
     id_docente: '',
     observaciones: ''
   });
+
+  const [loadingInscripciones, setLoadingInscripciones] = useState(false);
+  const [inscripcionOptions, setInscripcionOptions] = useState([]);
+  const [tiposEvaluacion, setTiposEvaluacion] = useState([]);
+  const [loadingTiposEvaluacion, setLoadingTiposEvaluacion] = useState(false);
 
   const validationRules = {
     id_inscripcion: [commonRules.required],
@@ -22,7 +27,7 @@ const NotaForm = ({ nota, onSubmit, onCancel, isEdit = false }) => {
       commonRules.min(0),
       commonRules.max(100)
     ],
-    tipo_evaluacion: [commonRules.required],
+    id_tipo_evaluacion: [commonRules.required],
     id_docente: [
       commonRules.required,
       (value) => {
@@ -36,52 +41,112 @@ const NotaForm = ({ nota, onSubmit, onCancel, isEdit = false }) => {
 
   const { validator, validateField, validate, getFieldError, hasFieldError } = useFormValidation(validationRules);
 
+  // Load initial data when editing
   useEffect(() => {
     if (isEdit && nota) {
       setFormData({
         id_inscripcion: nota.id_inscripcion || '',
         calificacion: nota.calificacion || 0,
-        tipo_evaluacion: nota.tipo_evaluacion || 'parcial1',
+        id_tipo_evaluacion: nota.id_tipo_evaluacion || '',
         id_docente: nota.id_docente || '',
         observaciones: nota.observaciones || ''
       });
+      console.log(nota)
+      // Load tipos de evaluacion if we have id_materia
+      if (nota.id_materia) {
+        fetchTiposEvaluacion(nota.id_materia);
+      }
     }
   }, [isEdit, nota]);
 
+  // Load tipos de evaluacion when inscripcion changes or on initial load in edit mode
   useEffect(() => {
-    cargarInscripciones();
-  }, []);
+    if (formData.id_inscripcion) {
+      const selectedInscripcion = inscripcionOptions.find(opt => opt.value === formData.id_inscripcion);
+      if (selectedInscripcion?.id_materia) {
+        fetchTiposEvaluacion(selectedInscripcion.id_materia);
+      }
+    }
+  }, [formData.id_inscripcion, inscripcionOptions]);
 
-  const cargarInscripciones = async () => {
+  // Load tipos de evaluacion when inscripcion changes or on initial load in edit mode
+  useEffect(() => {
+    if (formData.id_inscripcion) {
+      const selectedInscripcion = inscripcionOptions.find(opt => opt.value === formData.id_inscripcion);
+      if (selectedInscripcion?.id_materia) {
+        fetchTiposEvaluacion(selectedInscripcion.id_materia);
+      }
+    }
+  }, [formData.id_inscripcion, inscripcionOptions]);
+
+  const fetchInscripciones = async (search) => {
+    setLoadingInscripciones(true);
     try {
-      setLoading(true);
-      const response = await dataService.inscripciones.obtenerTodas({ estado: 'inscrito' });
-      setInscripciones(response.data);
+      const params = {
+        search: search || '',
+        limit: 20,
+        page: 1
+      };
+      const response = await dataService.inscripciones.obtenerTodas(params);
+      if (response.success) {
+        const options = response.data.map(inscripcion => ({
+          value: inscripcion.id_inscripcion,
+          label: `${inscripcion.estudiante_nombre} ${inscripcion.estudiante_apellido} - ${inscripcion.materia_nombre}`,
+          id_materia: inscripcion.id_materia // Include id_materia in the option
+        }));
+        setInscripcionOptions(options);
+      }
     } catch (error) {
-      console.error('Error al cargar inscripciones:', error);
+      notificationService.error('Error al cargar inscripciones');
     } finally {
-      setLoading(false);
+      setLoadingInscripciones(false);
     }
   };
 
-  const handleChange = (e) => {
+  useEffect(() => {
+    fetchInscripciones('');
+  }, []);
+
+  const fetchTiposEvaluacion = async (id_materia) => {
+    setLoadingTiposEvaluacion(true);
+    try {
+      const response = await dataService.tiposEvaluacion.obtenerPorMateria(id_materia);
+      if (response.success) {
+        setTiposEvaluacion(response.data);
+      }
+    } catch (error) {
+      notificationService.error('Error al cargar tipos de evaluación');
+    } finally {
+      setLoadingTiposEvaluacion(false);
+    }
+  };
+
+  const handleChange = async (e) => {
     const { name, value } = e.target;
     
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: value,
+      ...(name === 'id_inscripcion' ? { id_tipo_evaluacion: '' } : {}) // Reset tipo_evaluacion when inscripcion changes
     }));
-
     validateField(name, value);
+
+    // Handle tipos_evaluacion loading when inscripcion changes
+    if (name === 'id_inscripcion' && value) {
+      const selectedInscripcion = inscripcionOptions.find(opt => opt.value === value);
+      if (selectedInscripcion?.id_materia) {
+        await fetchTiposEvaluacion(selectedInscripcion.id_materia);
+      }
+    } else if (name === 'id_inscripcion') {
+      setTiposEvaluacion([]); // Clear tipos_evaluacion when no inscripcion is selected
+    }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
     if (!validate(formData)) {
       return;
     }
-
     onSubmit(formData);
   };
 
@@ -90,27 +155,21 @@ const NotaForm = ({ nota, onSubmit, onCancel, isEdit = false }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Inscripción */}
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-secondary-700 mb-2">
-            Inscripción
-          </label>
-          <select
+          
+          <SearchableSelect
+            label="Inscripción"
             name="id_inscripcion"
             value={formData.id_inscripcion}
             onChange={handleChange}
-            className={`w-full h-12 px-4 py-3 text-base border ${
-              hasFieldError('id_inscripcion') ? 'border-red-500' : 'border-secondary-300'
-            } bg-white text-secondary-900 placeholder-secondary-400 rounded-lg focus:outline-none focus:ring-2 focus:border-primary-500 focus:ring-primary-500/20 transition-colors duration-200`}
+            options={inscripcionOptions}
+            onSearch={fetchInscripciones}
+            loading={loadingInscripciones}
+            placeholder="Buscar inscripción..."
+            noOptionsText="No se encontraron inscripciones"
             disabled={isEdit}
             required
-          >
-            <option value="">Seleccione una inscripción</option>
-            {inscripciones.map(inscripcion => (
-              <option key={inscripcion.id_inscripcion} value={inscripcion.id_inscripcion}>
-                {inscripcion.estudiante_nombre} {inscripcion.estudiante_apellido} - {inscripcion.materia_nombre}
-              </option>
-            ))}
-          </select>
-          {getFieldError('id_inscripcion') && (
+          />
+          {hasFieldError('id_inscripcion') && (
             <p className="mt-1 text-sm text-red-500">{getFieldError('id_inscripcion')}</p>
           )}
         </div>
@@ -134,21 +193,31 @@ const NotaForm = ({ nota, onSubmit, onCancel, isEdit = false }) => {
             Tipo de Evaluación
           </label>
           <select
-            name="tipo_evaluacion"
-            value={formData.tipo_evaluacion}
+            name="id_tipo_evaluacion"
+            value={formData.id_tipo_evaluacion}
             onChange={handleChange}
             className={`w-full h-12 px-4 py-3 text-base border ${
-              hasFieldError('tipo_evaluacion') ? 'border-red-500' : 'border-secondary-300'
+              hasFieldError('id_tipo_evaluacion') ? 'border-red-500' : 'border-secondary-300'
             } bg-white text-secondary-900 placeholder-secondary-400 rounded-lg focus:outline-none focus:ring-2 focus:border-primary-500 focus:ring-primary-500/20 transition-colors duration-200`}
             required
+            disabled={!formData.id_inscripcion || loadingTiposEvaluacion}
           >
-            <option value="parcial1">Primer Parcial</option>
-            <option value="parcial2">Segundo Parcial</option>
-            <option value="final">Examen Final</option>
-            <option value="segunda_instancia">Segunda Instancia</option>
+            <option value="">
+              {loadingTiposEvaluacion 
+                ? 'Cargando tipos de evaluación...' 
+                : formData.id_inscripcion 
+                  ? 'Seleccione tipo de evaluación'
+                  : 'Primero seleccione una inscripción'
+              }
+            </option>
+            {tiposEvaluacion.map(tipo => (
+              <option key={tipo.id_tipo_evaluacion} value={tipo.id_tipo_evaluacion}>
+                {tipo.nombre} ({tipo.porcentaje}%)
+              </option>
+            ))}
           </select>
-          {getFieldError('tipo_evaluacion') && (
-            <p className="mt-1 text-sm text-red-500">{getFieldError('tipo_evaluacion')}</p>
+          {hasFieldError('id_tipo_evaluacion') && (
+            <p className="mt-1 text-sm text-red-500">{getFieldError('id_tipo_evaluacion')}</p>
           )}
         </div>
 

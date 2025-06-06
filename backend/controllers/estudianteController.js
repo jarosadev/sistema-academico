@@ -1,6 +1,7 @@
 const { executeQuery, pool } = require('../config/database');
 const { createError } = require('../middleware/errorHandler');
 const { auditAction } = require('../middleware/audit-complete');
+const bcrypt = require('bcrypt');
 
 class EstudianteController {
 
@@ -276,7 +277,8 @@ class EstudianteController {
                 direccion,
                 telefono,
                 id_mencion,
-                estado_academico
+                estado_academico,
+                password
             } = req.body;
 
             // Verificar que el estudiante existe
@@ -290,6 +292,16 @@ class EstudianteController {
             }
 
             const datosAnteriores = estudianteExistente[0];
+
+            // Actualizar password si se proporciona
+            if (password) {
+                const saltRounds = 10;
+                const hashedPassword = await bcrypt.hash(password, saltRounds);
+                await executeQuery(
+                    'UPDATE usuarios SET password = ? WHERE id_usuario = ?',
+                    [hashedPassword, datosAnteriores.id_usuario]
+                );
+            }
 
             // Actualizar estudiante
             const query = `
@@ -468,6 +480,103 @@ class EstudianteController {
             next(error);
         }
     }
+
+    // Controlador corregido para obtener notas con tipos de evaluación
+    async obtenerNotasPorEstudiante(req, res, next) {
+        try {
+            const { id } = req.params;
+            const query = `
+            SELECT 
+                n.*,
+                m.nombre as materia_nombre,
+                m.sigla as materia_sigla,
+                i.gestion,
+                i.periodo,
+                i.id_inscripcion,
+                te.nombre as tipo_evaluacion_nombre,
+                te.porcentaje as tipo_evaluacion_porcentaje
+            FROM notas n
+            JOIN inscripciones i ON n.id_inscripcion = i.id_inscripcion
+            JOIN materias m ON i.id_materia = m.id_materia
+            JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
+            WHERE i.id_estudiante = ?
+            ORDER BY i.gestion DESC, i.periodo DESC, n.fecha_registro DESC
+        `;
+            const notas = await executeQuery(query, [id]);
+
+            // Procesar las notas para calcular promedios ponderados por materia
+            const notasConPromedios = this.calcularPromediosPonderados(notas);
+
+            res.json({ success: true, data: notasConPromedios });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    // Método auxiliar para calcular promedios ponderados
+    calcularPromediosPonderados(notas) {
+        // Agrupar notas por inscripción (materia-gestión-periodo)
+        const notasAgrupadas = {};
+
+        notas.forEach(nota => {
+            const key = `${nota.id_inscripcion}`;
+            if (!notasAgrupadas[key]) {
+                notasAgrupadas[key] = {
+                    id_inscripcion: nota.id_inscripcion,
+                    materia_nombre: nota.materia_nombre,
+                    materia_sigla: nota.materia_sigla,
+                    gestion: nota.gestion,
+                    periodo: nota.periodo,
+                    notas: [],
+                    promedio_ponderado: 0,
+                    porcentaje_total: 0
+                };
+            }
+            notasAgrupadas[key].notas.push(nota);
+        });
+
+        // Calcular promedio ponderado para cada materia
+        Object.keys(notasAgrupadas).forEach(key => {
+            const materia = notasAgrupadas[key];
+            let sumaCalificacionesPonderadas = 0;
+            let sumaPorcentajes = 0;
+
+            materia.notas.forEach(nota => {
+                const porcentaje = parseFloat(nota.tipo_evaluacion_porcentaje) || 0;
+                const calificacion = parseFloat(nota.calificacion) || 0;
+
+                // Calcular la nota real basada en el porcentaje
+                const notaReal = (calificacion * porcentaje) / 100;
+                sumaCalificacionesPonderadas += notaReal;
+                sumaPorcentajes += porcentaje;
+            });
+
+            materia.promedio_ponderado = sumaCalificacionesPonderadas;
+            materia.porcentaje_total = sumaPorcentajes;
+
+            // Si no se ha completado el 100% de evaluaciones, mostrar el promedio parcial
+            if (sumaPorcentajes > 0) {
+                materia.promedio_parcial = (sumaCalificacionesPonderadas / sumaPorcentajes) * 100;
+            } else {
+                materia.promedio_parcial = 0;
+            }
+        });
+
+        // Convertir de vuelta a array plano para mantener compatibilidad
+        const notasConPromedios = [];
+        Object.values(notasAgrupadas).forEach(materia => {
+            materia.notas.forEach(nota => {
+                notasConPromedios.push({
+                    ...nota,
+                    promedio_materia_ponderado: materia.promedio_ponderado.toFixed(2),
+                    promedio_materia_parcial: materia.promedio_parcial.toFixed(2),
+                    porcentaje_completado: materia.porcentaje_total
+                });
+            });
+        });
+
+        return notasConPromedios;
+    }
 }
 
 const controller = new EstudianteController();
@@ -480,6 +589,7 @@ module.exports = {
     eliminarEstudiante: controller.eliminarEstudiante.bind(controller),
     obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
     obtenerHistorialAcademico: controller.obtenerHistorialAcademico.bind(controller),
+    obtenerNotasPorEstudiante: controller.obtenerNotasPorEstudiante.bind(controller),
     // Funciones adicionales que faltan en las rutas
     obtenerInscripcionesPorEstudiante: async (req, res, next) => {
         try {
@@ -500,27 +610,7 @@ module.exports = {
             next(error);
         }
     },
-    obtenerNotasPorEstudiante: async (req, res, next) => {
-        try {
-            const { id } = req.params;
-            const query = `
-                SELECT 
-                    n.*,
-                    m.nombre as materia_nombre,
-                    m.sigla as materia_sigla,
-                    i.gestion
-                FROM notas n
-                JOIN inscripciones i ON n.id_inscripcion = i.id_inscripcion
-                JOIN materias m ON i.id_materia = m.id_materia
-                WHERE i.id_estudiante = ?
-                ORDER BY i.gestion DESC, n.fecha_registro DESC
-            `;
-            const notas = await executeQuery(query, [id]);
-            res.json({ success: true, data: notas });
-        } catch (error) {
-            next(error);
-        }
-    },
+
     obtenerEstudiantesPorMencion: async (req, res, next) => {
         try {
             const { id_mencion } = req.params;

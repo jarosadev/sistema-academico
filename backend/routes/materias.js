@@ -32,6 +32,16 @@ router.get('/estadisticas',
 );
 
 /**
+ * @route GET /api/materias/estado-cierre
+ * @desc Obtener estado de cierre de materias para un docente o administrador
+ * @access Docente, Administrador
+ */
+router.get('/estado-cierre',
+    requireRole(['docente', 'administrador']),
+    materiaController.obtenerEstadoCierreMaterias
+);
+
+/**
  * @route GET /api/materias/:id
  * @desc Obtener materia por ID
  * @access Administrador, Docente, Estudiante
@@ -119,6 +129,26 @@ router.get('/:id/inscripciones',
 router.get('/:id/paralelos',
     requireRole(['administrador', 'docente', 'estudiante']),
     materiaController.obtenerParalelosMateria
+);
+
+/**
+ * @route POST /api/materias/:id/cerrar
+ * @desc Cerrar una materia y actualizar estados de estudiantes
+ * @access Docente, Administrador
+ */
+router.post('/:id/cerrar',
+    requireRole(['docente', 'administrador']),
+    materiaController.cerrarMateria
+);
+
+/**
+ * @route POST /api/materias/:id/abrir
+ * @desc Abrir/reabrir una materia cerrada
+ * @access Administrador
+ */
+router.post('/:id/abrir',
+    requireRole(['administrador']),
+    materiaController.abrirMateria
 );
 
 module.exports = router;

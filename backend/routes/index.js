@@ -12,6 +12,8 @@ const notaRoutes = require('./notas');
 const reporteRoutes = require('./reportes');
 const auditoriaRoutes = require('./auditoria-fixed');
 const tiposEvaluacionRoutes = require('./tiposEvaluacion');
+const prerequisitosRoutes = require('./prerequisitos');
+const horariosRoutes = require('./horarios');
 
 // Middleware para logging de rutas en desarrollo
 if (process.env.NODE_ENV === 'development') {
@@ -40,6 +42,8 @@ router.get('/', (req, res) => {
             reportes: '/api/reportes',
             auditoria: '/api/auditoria',
             tiposEvaluacion: '/api/tipos-evaluacion',
+            prerequisitos: '/api/prerequisitos',
+            horarios: '/api/horarios',
             health: '/api/health'
         },
         health: '/health',
@@ -58,6 +62,8 @@ router.use('/notas', notaRoutes);
 router.use('/reportes', reporteRoutes);
 router.use('/auditoria', auditoriaRoutes);
 router.use('/tipos-evaluacion', tiposEvaluacionRoutes);
+router.use('/prerequisitos', prerequisitosRoutes);
+router.use('/horarios', horariosRoutes);
 
 // Ruta para estadísticas generales de la API
 router.get('/stats', (req, res) => {
@@ -89,7 +95,9 @@ router.use('*', (req, res) => {
             '/api/historial',
             '/api/reportes',
             '/api/auditoria',
-            '/api/tipos-evaluacion'
+            '/api/tipos-evaluacion',
+            '/api/prerequisitos',
+            '/api/horarios'
         ],
         timestamp: new Date().toISOString()
     });

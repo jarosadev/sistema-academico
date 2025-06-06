@@ -45,14 +45,14 @@ INSERT INTO menciones (nombre, descripcion, materias_requeridas) VALUES
 
 -- Insertar materias para Ingeniería de Sistemas (ejemplo)
 INSERT INTO materias (nombre, sigla, semestre, id_mencion, descripcion) VALUES
--- Primer Semestre
+-- Primero
 ('Matemática I', 'MAT101', 1, 1, 'Fundamentos de cálculo diferencial e integral'),
 ('Física I', 'FIS101', 1, 1, 'Mecánica clásica y principios físicos básicos'),
 ('Química General', 'QUI101', 1, 1, 'Principios básicos de química general'),
 ('Introducción a la Programación', 'SIS101', 1, 1, 'Fundamentos de programación y algoritmos'),
 ('Comunicación y Lenguaje', 'LEN101', 1, 1, 'Técnicas de comunicación oral y escrita'),
 
--- Segundo Semestre
+-- Segundo
 ('Matemática II', 'MAT102', 2, 1, 'Cálculo multivariable y ecuaciones diferenciales'),
 ('Física II', 'FIS102', 2, 1, 'Electricidad, magnetismo y ondas'),
 ('Programación I', 'SIS102', 2, 1, 'Programación estructurada y orientada a objetos'),
@@ -105,16 +105,16 @@ INSERT INTO docente_materias (id_docente, id_materia, gestion, paralelo) VALUES
 (2, 13, 2024, 'A'), -- María García - Base de Datos I
 (2, 17, 2024, 'A'); -- María García - Base de Datos II
 
--- Inscribir estudiantes en materias (primer semestre 2024)
+-- Inscribir estudiantes en materias (Primero 2024)
 INSERT INTO inscripciones (id_estudiante, id_materia, gestion, paralelo) VALUES
--- Juan Pérez - Primer semestre
+-- Juan Pérez - Primero
 (1, 1, 2024, 'A'), -- Matemática I
 (1, 2, 2024, 'A'), -- Física I
 (1, 3, 2024, 'A'), -- Química General
 (1, 4, 2024, 'A'), -- Introducción a la Programación
 (1, 5, 2024, 'A'), -- Comunicación y Lenguaje
 
--- Ana Quispe - Primer semestre
+-- Ana Quispe - Primero
 (2, 1, 2024, 'A'), -- Matemática I
 (2, 2, 2024, 'A'), -- Física I
 (2, 3, 2024, 'A'), -- Química General

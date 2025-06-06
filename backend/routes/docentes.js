@@ -106,7 +106,6 @@ router.delete('/:id/materias/:id_materia',
         res.json({ success: false, message: 'Función no implementada' });
     })
 );
-
 /**
  * @route GET /api/docentes/:id/estudiantes
  * @desc Obtener estudiantes de un docente (por materias asignadas)

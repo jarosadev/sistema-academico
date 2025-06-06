@@ -27,6 +27,10 @@ const NotasPage = () => {
     search: '',
     gestion: '',
     estado: '',
+    paralelo: '',
+    id_tipo_evaluacion: '',
+    sortBy: 'fecha_registro',
+    sortOrder: 'DESC',
     page: 1,
     limit: 10
   });
@@ -69,11 +73,24 @@ const NotasPage = () => {
   const cargarNotas = async () => {
     try {
       setLoading(true);
-      const response = await dataService.notas.obtenerTodas(filtros);
+      const params = {
+        estudiante: filtros.search,
+        gestion: filtros.gestion,
+        estado: filtros.estado,
+        paralelo: filtros.paralelo,
+        id_tipo_evaluacion: filtros.id_tipo_evaluacion,
+        sortBy: filtros.sortBy,
+        sortOrder: filtros.sortOrder,
+        page: filtros.page,
+        limit: filtros.limit
+      };
+      const response = await dataService.notas.obtenerTodas(params);
       setNotas(response.data);
       setPaginacion(response.pagination);
     } catch (error) {
-      notificationService.error('Error al cargar notas: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al cargar notas: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -82,7 +99,7 @@ const NotasPage = () => {
   const cargarEstadisticas = async () => {
     try {
       const response = await dataService.notas.obtenerEstadisticas();
-      setEstadisticas(response.data);
+      setEstadisticas(response.data.resumen);
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
     }
@@ -104,48 +121,60 @@ const NotasPage = () => {
   };
 
   const handleCrearNota = async (data) => {
-    const loadingToast = notificationService.loading('Registrando nota...');
+    let loadingToast = null;
     try {
+      loadingToast = notificationService.loading('Registrando nota...');
       await dataService.notas.crear(data);
-      notificationService.dismissToast(loadingToast);
       notificationService.success('Nota registrada exitosamente');
       setShowCreateModal(false);
       cargarNotas();
       cargarEstadisticas();
     } catch (error) {
-      notificationService.dismissToast(loadingToast);
-      notificationService.error('Error al registrar nota: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al registrar nota: ' + error.message);
+      }
+    } finally {
+      if (loadingToast) notificationService.dismissToast(loadingToast);
     }
   };
 
   const handleEditarNota = async (data) => {
-    const loadingToast = notificationService.loading('Actualizando nota...');
+    let loadingToast = null;
     try {
+      loadingToast = notificationService.loading('Actualizando nota...');
       await dataService.notas.actualizar(selectedNota.id_nota, data);
-      notificationService.dismissToast(loadingToast);
       notificationService.success('Nota actualizada exitosamente');
       setShowEditModal(false);
       setSelectedNota(null);
       cargarNotas();
+      cargarEstadisticas();
     } catch (error) {
-      notificationService.dismissToast(loadingToast);
-      notificationService.error('Error al actualizar nota: ' + error.message);
+      if (!window.__isSessionExpired) {
+        notificationService.error('Error al actualizar nota: ' + error.message);
+      }
+    } finally {
+      if (loadingToast) notificationService.dismissToast(loadingToast);
     }
   };
 
   const handleEliminarNota = async (nota) => {
-    const confirmed = await notificationService.confirmDelete(`Nota de ${nota.estudiante_nombre}`);
+    const confirmed = await notificationService.confirmDelete(
+      `Nota de ${nota.estudiante_nombre}`
+    );
     if (confirmed) {
-      const loadingToast = notificationService.loading('Eliminando nota...');
+      let loadingToast = null;
       try {
+        loadingToast = notificationService.loading('Eliminando nota...');
         await dataService.notas.eliminar(nota.id_nota);
-        notificationService.dismissToast(loadingToast);
         notificationService.success('Nota eliminada exitosamente');
         cargarNotas();
         cargarEstadisticas();
       } catch (error) {
-        notificationService.dismissToast(loadingToast);
-        notificationService.error('Error al eliminar nota: ' + error.message);
+        if (!window.__isSessionExpired) {
+          notificationService.error('Error al eliminar nota: ' + error.message);
+        }
+      } finally {
+        if (loadingToast) notificationService.dismissToast(loadingToast);
       }
     }
   };
@@ -161,8 +190,12 @@ const NotasPage = () => {
       title: 'Materia'
     },
     {
+      key: 'tipo_evaluacion_nombre',
+      title: 'Tipo Evaluación'
+    },
+    {
       key: 'nota_final',
-      title: 'Nota Final',
+      title: 'Calificación',
       render: (nota) => (
         <span className={`font-semibold ${
           nota.nota_final >= 51 ? 'text-green-600' : 'text-red-600'
@@ -176,7 +209,9 @@ const NotasPage = () => {
       title: 'Estado',
       render: (nota) => (
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          nota.nota_final >= 51 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+          nota.nota_final >= 51 
+            ? 'bg-green-100 text-green-800' 
+            : 'bg-red-100 text-red-800'
         }`}>
           {nota.nota_final >= 51 ? 'Aprobado' : 'Reprobado'}
         </span>
@@ -190,9 +225,16 @@ const NotasPage = () => {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => {
-              setSelectedNota(nota);
-              setShowDetailModal(true);
+            onClick={async () => {
+              try {
+                const response = await dataService.notas.obtenerPorId(nota.id_nota);
+                if (response.success !== false) {
+                  setSelectedNota(response.data);
+                  setShowDetailModal(true);
+                }
+              } catch (error) {
+                notificationService.error('Error al obtener detalle de nota: ' + error.message);
+              }
             }}
           >
             <Eye className="w-4 h-4" />
@@ -200,9 +242,16 @@ const NotasPage = () => {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => {
-              setSelectedNota(nota);
-              setShowEditModal(true);
+            onClick={async () => {
+              try {
+                const response = await dataService.notas.obtenerPorId(nota.id_nota);
+                if (response.success !== false) {
+                  setSelectedNota(response.data);
+                  setShowEditModal(true);
+                }
+              } catch (error) {
+                notificationService.error('Error al obtener detalle de nota: ' + error.message);
+              }
             }}
           >
             <Edit className="w-4 h-4" />
@@ -224,10 +273,17 @@ const NotasPage = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-secondary-900">Gestión de Notas</h1>
-          <p className="text-secondary-600 mt-1">Administra las calificaciones del sistema</p>
+          <h1 className="text-2xl sm:text-2xl font-bold text-secondary-900">
+            Gestión de Notas
+          </h1>
+          <p className="text-secondary-600 mt-1">
+            Administra las calificaciones del sistema
+          </p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto">
+        <Button
+          onClick={() => setShowCreateModal(true)}
+          className="w-full sm:w-auto"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Nueva Nota
         </Button>
@@ -240,7 +296,9 @@ const NotasPage = () => {
             <ClipboardCheck className="w-8 h-8 text-blue-500" />
             <div className="ml-3">
               <p className="text-sm font-medium text-secondary-600">Total Notas</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.total_notas}</p>
+              <p className="text-2xl font-bold text-secondary-900">
+                {estadisticas.total_notas}
+              </p>
             </div>
           </div>
         </Card>
@@ -249,7 +307,9 @@ const NotasPage = () => {
             <TrendingUp className="w-8 h-8 text-green-500" />
             <div className="ml-3">
               <p className="text-sm font-medium text-secondary-600">Aprobados</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.aprobados}</p>
+              <p className="text-2xl font-bold text-secondary-900">
+                {estadisticas.aprobados}
+              </p>
             </div>
           </div>
         </Card>
@@ -258,7 +318,9 @@ const NotasPage = () => {
             <TrendingDown className="w-8 h-8 text-red-500" />
             <div className="ml-3">
               <p className="text-sm font-medium text-secondary-600">Reprobados</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.reprobados}</p>
+              <p className="text-2xl font-bold text-secondary-900">
+                {estadisticas.reprobados}
+              </p>
             </div>
           </div>
         </Card>
@@ -267,7 +329,9 @@ const NotasPage = () => {
             <ClipboardCheck className="w-8 h-8 text-yellow-500" />
             <div className="ml-3">
               <p className="text-sm font-medium text-secondary-600">Promedio</p>
-              <p className="text-2xl font-bold text-secondary-900">{estadisticas.promedio_general}</p>
+              <p className="text-2xl font-bold text-secondary-900">
+                {estadisticas.promedio_general}
+              </p>
             </div>
           </div>
         </Card>
@@ -275,7 +339,7 @@ const NotasPage = () => {
 
       {/* Filtros */}
       <Card className="p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
           <div className="sm:col-span-2 lg:col-span-1">
             <Input
               placeholder="Buscar por estudiante o materia..."
@@ -292,9 +356,18 @@ const NotasPage = () => {
               onChange={(e) => handleFiltroChange('gestion', e.target.value)}
             >
               <option value="">Todas las gestiones</option>
-              <option value="2024-1">2024-1</option>
-              <option value="2023-2">2023-2</option>
-              <option value="2023-1">2023-1</option>
+              {(() => {
+                const currentYear = new Date().getFullYear();
+                return [
+                  `${currentYear}`,
+                  `${currentYear - 1}`,
+                  `${currentYear + 1}`,
+                ].map((gestion) => (
+                  <option key={gestion} value={gestion}>
+                    {gestion}
+                  </option>
+                ));
+              })()}
             </select>
           </div>
           <div>
@@ -304,8 +377,34 @@ const NotasPage = () => {
               onChange={(e) => handleFiltroChange('estado', e.target.value)}
             >
               <option value="">Todos los estados</option>
-              <option value="aprobado">Aprobados</option>
-              <option value="reprobado">Reprobados</option>
+              <option value="aprobado">Aprobado</option>
+              <option value="reprobado">Reprobado</option>
+            </select>
+          </div>
+          <div>
+            <select
+              className="w-full h-12 px-4 py-3 text-base border border-secondary-300 bg-white text-secondary-900 placeholder-secondary-400 rounded-lg focus:outline-none focus:ring-2 focus:border-primary-500 focus:ring-primary-500/20 transition-colors duration-200"
+              value={filtros.paralelo}
+              onChange={(e) => handleFiltroChange('paralelo', e.target.value)}
+            >
+              <option value="">Todos los paralelos</option>
+              <option value="A">Paralelo A</option>
+              <option value="B">Paralelo B</option>
+              <option value="C">Paralelo C</option>
+              <option value="D">Paralelo D</option>
+            </select>
+          </div>
+          <div>
+            <select
+              className="w-full h-12 px-4 py-3 text-base border border-secondary-300 bg-white text-secondary-900 placeholder-secondary-400 rounded-lg focus:outline-none focus:ring-2 focus:border-primary-500 focus:ring-primary-500/20 transition-colors duration-200"
+              value={filtros.id_tipo_evaluacion}
+              onChange={(e) => handleFiltroChange('id_tipo_evaluacion', e.target.value)}
+            >
+              <option value="">Todos los tipos</option>
+              <option value="1">Primer Parcial</option>
+              <option value="2">Segundo Parcial</option>
+              <option value="3">Examen Final</option>
+              <option value="4">Segunda Instancia</option>
             </select>
           </div>
           <div>

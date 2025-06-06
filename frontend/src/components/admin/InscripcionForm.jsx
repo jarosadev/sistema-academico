@@ -11,6 +11,7 @@ const InscripcionForm = ({ inscripcion, onSubmit, onCancel, isEdit = false }) =>
     id_estudiante: '',
     id_materia: '',
     gestion: '',
+    periodo: '',
     paralelo: '',
     estado: 'inscrito'
   });
@@ -30,12 +31,17 @@ const InscripcionForm = ({ inscripcion, onSubmit, onCancel, isEdit = false }) =>
     gestiones: (() => {
       const currentYear = new Date().getFullYear();
       return [
-        { value: `${currentYear}-1`, label: `${currentYear}-1` },
-        { value: `${currentYear}-2`, label: `${currentYear}-2` },
-        { value: `${currentYear-1}-2`, label: `${currentYear-1}-2` },
-        { value: `${currentYear-1}-1`, label: `${currentYear-1}-1` }
+        { value: currentYear.toString(), label: currentYear.toString() },
+        { value: (currentYear - 1).toString(), label: (currentYear - 1).toString() },
+        { value: (currentYear + 1).toString(), label: (currentYear + 1).toString() }
       ];
     })(),
+    periodos: [
+      { value: "1", label: "Primero" },
+      { value: "2", label: "Segundo" },
+      { value: "3", label: "Verano" },
+      { value: "4", label: "Invierno" }
+    ],
     estados: [
       { value: 'inscrito', label: 'Inscrito' },
       { value: 'aprobado', label: 'Aprobado' },
@@ -49,6 +55,7 @@ const InscripcionForm = ({ inscripcion, onSubmit, onCancel, isEdit = false }) =>
     id_materia: [commonRules.required],
     gestion: [commonRules.required],
     paralelo: [commonRules.required],
+    periodo: [commonRules.required],
     estado: [commonRules.required]
   };
 
@@ -135,6 +142,7 @@ const InscripcionForm = ({ inscripcion, onSubmit, onCancel, isEdit = false }) =>
         id_estudiante: inscripcion.id_estudiante || '',
         id_materia: inscripcion.id_materia || '',
         gestion: inscripcion.gestion || '',
+        periodo: inscripcion.periodo ? inscripcion.periodo.toString() : '',
         paralelo: inscripcion.paralelo || '',
         estado: inscripcion.estado || 'inscrito'
       });
@@ -240,6 +248,25 @@ const InscripcionForm = ({ inscripcion, onSubmit, onCancel, isEdit = false }) =>
             {options.estados.map(estado => (
               <option key={estado.value} value={estado.value}>
                 {estado.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        {/* Periodo */}
+        <div>
+          <Select
+            label="Periodo"
+            name="periodo"
+            value={formData.periodo}
+            onChange={handleChange}
+            error={getFieldError('periodo')}
+            required
+          >
+            <option value="">Seleccione periodo</option>
+            {options.periodos.map(periodo => (
+              <option key={periodo.value} value={periodo.value}>
+                {periodo.label}
               </option>
             ))}
           </Select>

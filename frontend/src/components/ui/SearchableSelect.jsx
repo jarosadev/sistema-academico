@@ -80,7 +80,7 @@ const SearchableSelect = ({
     ${variantClasses[variant]}
   `;
 
-  const selectedLabel = options.find((opt) => opt.value === value)?.label || value || '';
+  const selectedLabel = options.find((opt) => opt.value === value)?.label || (typeof value === 'object' ? '' : value) || '';
 
   const handleCustomValue = () => {
     if (searchTerm.trim() && !options.find(opt => opt.value === searchTerm.trim())) {

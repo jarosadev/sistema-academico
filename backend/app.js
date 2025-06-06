@@ -14,6 +14,8 @@ const notasRoutes = require('./routes/notas');
 const reportesRoutes = require('./routes/reportes');
 const auditoriaRoutes = require('./routes/auditoria');
 const tiposEvaluacionRoutes = require('./routes/tiposEvaluacion');
+const prerequisitosRoutes = require('./routes/prerequisitos');
+const horariosRoutes = require('./routes/horarios');
 
 const app = express();
 
@@ -34,6 +36,8 @@ app.use('/api/notas', notasRoutes);
 app.use('/api/reportes', reportesRoutes);
 app.use('/api/auditoria', auditoriaRoutes);
 app.use('/api/tipos-evaluacion', tiposEvaluacionRoutes);
+app.use('/api/prerequisitos', prerequisitosRoutes);
+app.use('/api/horarios', horariosRoutes);
 
 // Manejo de errores
 app.use(errorHandler);

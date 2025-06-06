@@ -32,13 +32,13 @@ router.get('/estadisticas',
 );
 
 /**
- * @route GET /api/inscripciones/:id
- * @desc Obtener inscripción por ID
+ * @route GET /api/inscripciones/:id/detalle
+ * @desc Obtener detalle de inscripción con notas y tipos de evaluación
  * @access Administrador, Docente, Estudiante (solo sus propias inscripciones)
  */
-router.get('/:id', 
-    requireRole(['administrador', 'docente', 'estudiante']), 
-    inscripcionController.obtenerInscripcion
+router.get('/:id/detalle',
+    requireRole(['administrador', 'docente', 'estudiante']),
+    inscripcionController.obtenerDetalleInscripcion
 );
 
 /**

@@ -20,6 +20,7 @@ class InscripcionController {
                 gestion = '',
                 estado = '',
                 paralelo = '',
+                periodo = '',
                 sortBy = 'fecha_inscripcion',
                 sortOrder = 'DESC'
             } = req.query;
@@ -56,6 +57,11 @@ class InscripcionController {
             if (paralelo) {
                 whereConditions.push('i.paralelo = ?');
                 queryParams.push(paralelo);
+            }
+
+            if (periodo) {
+                whereConditions.push('i.periodo = ?');
+                queryParams.push(periodo);
             }
 
             const whereClause = whereConditions.join(' AND ');
@@ -130,11 +136,12 @@ class InscripcionController {
     /**
      * Obtener inscripción por ID
      */
-    async obtenerInscripcion(req, res, next) {
+    async obtenerDetalleInscripcion(req, res, next) {
         try {
             const { id } = req.params;
 
-            const query = `
+            // Obtener datos básicos de la inscripción
+            const inscripcionQuery = `
                 SELECT 
                     i.*,
                     e.nombre as estudiante_nombre,
@@ -154,35 +161,26 @@ class InscripcionController {
                 INNER JOIN materias m ON i.id_materia = m.id_materia
                 LEFT JOIN menciones men ON m.id_mencion = men.id_mencion
                 LEFT JOIN docente_materias dm ON m.id_materia = dm.id_materia 
-                    AND i.gestion = dm.gestion AND i.paralelo = dm.paralelo
+                    AND i.gestion = dm.gestion AND i.periodo = dm.periodo AND i.paralelo = dm.paralelo
                 LEFT JOIN docentes d ON dm.id_docente = d.id_docente
                 WHERE i.id_inscripcion = ?
             `;
 
-            const inscripciones = await executeQuery(query, [id]);
+            const inscripciones = await executeQuery(inscripcionQuery, [id]);
 
             if (inscripciones.length === 0) {
                 throw createError('Inscripción no encontrada', 404);
             }
 
-            // Obtener notas de la inscripción
+            // Obtener notas y tipos de evaluación
             const notasQuery = `
                 SELECT 
                     n.*,
-                    d.nombre as docente_nombre,
-                    d.apellido as docente_apellido,
                     te.nombre as tipo_evaluacion
                 FROM notas n
-                LEFT JOIN docentes d ON n.id_docente = d.id_docente
                 LEFT JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
                 WHERE n.id_inscripcion = ?
-                ORDER BY 
-                    CASE te.nombre
-                        WHEN 'parcial1' THEN 1
-                        WHEN 'parcial2' THEN 2
-                        WHEN 'final' THEN 3
-                        WHEN 'segunda_instancia' THEN 4
-                    END
+                ORDER BY te.orden ASC
             `;
 
             const notas = await executeQuery(notasQuery, [id]);
@@ -209,6 +207,7 @@ class InscripcionController {
                 id_estudiante,
                 id_materia,
                 gestion,
+                periodo = 1,
                 paralelo = 'A'
             } = req.body;
 
@@ -234,8 +233,8 @@ class InscripcionController {
 
             // Verificar que no esté ya inscrito en la misma materia y gestión
             const inscripcionExistente = await executeQuery(
-                'SELECT id_inscripcion FROM inscripciones WHERE id_estudiante = ? AND id_materia = ? AND gestion = ?',
-                [id_estudiante, id_materia, gestion]
+                'SELECT id_inscripcion FROM inscripciones WHERE id_estudiante = ? AND id_materia = ? AND gestion = ? AND periodo = ?',
+                [id_estudiante, id_materia, gestion, periodo]
             );
 
             if (inscripcionExistente.length > 0) {
@@ -250,15 +249,104 @@ class InscripcionController {
                 throw createError('La materia no pertenece a la mención del estudiante', 400);
             }
 
+            // Verificar que existe la asignación docente-materia para el paralelo
+            const asignacionDocente = await executeQuery(
+                'SELECT * FROM docente_materias WHERE id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?',
+                [id_materia, gestion, periodo, paralelo]
+            );
+
+            if (asignacionDocente.length === 0) {
+                throw createError('No hay docente asignado para esta materia en el paralelo seleccionado', 404);
+            }
+
+            // Verificar prerrequisitos (solo si no es administrador)
+            const esAdmin = req.user && req.user.roles && req.user.roles.includes('administrador');
+            
+            if (!esAdmin) {
+                // Verificar prerrequisitos
+                const prerequisitosQuery = `
+                    SELECT 
+                        mp.id_materia_prerequisito,
+                        m.nombre,
+                        CASE 
+                            WHEN i.estado = 'aprobado' THEN TRUE
+                            ELSE FALSE
+                        END as cumplido
+                    FROM materias_prerequisitos mp
+                    INNER JOIN materias m ON mp.id_materia_prerequisito = m.id_materia
+                    LEFT JOIN inscripciones i ON m.id_materia = i.id_materia 
+                        AND i.id_estudiante = ?
+                        AND i.estado = 'aprobado'
+                    WHERE mp.id_materia = ? AND mp.obligatorio = TRUE
+                `;
+
+                const prerequisitos = await executeQuery(prerequisitosQuery, [id_estudiante, id_materia]);
+                
+                const prerequisitosNoCumplidos = prerequisitos.filter(p => !p.cumplido);
+                
+                if (prerequisitosNoCumplidos.length > 0) {
+                    const materiasFaltantes = prerequisitosNoCumplidos.map(p => p.nombre).join(', ');
+                    throw createError(
+                        `No cumple con los prerrequisitos. Debe aprobar primero: ${materiasFaltantes}`,
+                        400
+                    );
+                }
+            }
+
+            // Verificar conflictos de horario
+            const conflictosQuery = `
+                SELECT 
+                    h1.dia_semana,
+                    h1.hora_inicio,
+                    h1.hora_fin,
+                    m.nombre as materia_nombre
+                FROM horarios h1
+                INNER JOIN inscripciones i ON h1.id_materia = i.id_materia 
+                    AND h1.gestion = i.gestion 
+                    AND h1.periodo = i.periodo
+                    AND h1.paralelo = i.paralelo
+                INNER JOIN materias m ON i.id_materia = m.id_materia
+                WHERE i.id_estudiante = ?
+                    AND i.gestion = ?
+                    AND i.periodo = ?
+                    AND i.estado = 'inscrito'
+                    AND h1.activo = TRUE
+                    AND EXISTS (
+                        SELECT 1 FROM horarios h2
+                        WHERE h2.id_materia = ?
+                            AND h2.gestion = ?
+                            AND h2.periodo = ?
+                            AND h2.paralelo = ?
+                            AND h2.dia_semana = h1.dia_semana
+                            AND h2.activo = TRUE
+                            AND (
+                                (h2.hora_inicio < h1.hora_fin AND h2.hora_fin > h1.hora_inicio)
+                            )
+                    )
+            `;
+
+            const conflictos = await executeQuery(conflictosQuery, [
+                id_estudiante, gestion, periodo,
+                id_materia, gestion, periodo, paralelo
+            ]);
+
+            if (conflictos.length > 0) {
+                const conflicto = conflictos[0];
+                throw createError(
+                    `Conflicto de horario con ${conflicto.materia_nombre} el día ${conflicto.dia_semana}`,
+                    409
+                );
+            }
+
             // Verificar que hay cupo en el paralelo (opcional - se puede configurar límite)
             const cupoQuery = `
                 SELECT COUNT(*) as inscritos
                 FROM inscripciones 
-                WHERE id_materia = ? AND gestion = ? AND paralelo = ?
+                WHERE id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?
             `;
 
-            const cupoResult = await executeQuery(cupoQuery, [id_materia, gestion, paralelo]);
-            const LIMITE_PARALELO = 30; // Configurable
+            const cupoResult = await executeQuery(cupoQuery, [id_materia, gestion, periodo, paralelo]);
+            const LIMITE_PARALELO = 60; // Configurable
 
             if (cupoResult[0].inscritos >= LIMITE_PARALELO) {
                 throw createError(`El paralelo ${paralelo} está lleno (límite: ${LIMITE_PARALELO} estudiantes)`, 400);
@@ -267,17 +355,17 @@ class InscripcionController {
             // Crear inscripción
             const query = `
                 INSERT INTO inscripciones (
-                    id_estudiante, id_materia, gestion, paralelo, estado
-                ) VALUES (?, ?, ?, ?, 'inscrito')
+                    id_estudiante, id_materia, gestion, periodo, paralelo, estado
+                ) VALUES (?, ?, ?, ?, ?, 'inscrito')
             `;
 
             const result = await executeQuery(query, [
-                id_estudiante, id_materia, gestion, paralelo
+                id_estudiante, id_materia, gestion, periodo, paralelo
             ]);
 
             // Auditar acción
             await auditAction(req, 'inscripciones', 'INSERT', result.insertId, null, {
-                id_estudiante, id_materia, gestion, paralelo
+                id_estudiante, id_materia, gestion, periodo, paralelo
             });
 
             res.status(201).json({
@@ -288,6 +376,7 @@ class InscripcionController {
                     id_estudiante: parseInt(id_estudiante),
                     id_materia: parseInt(id_materia),
                     gestion: parseInt(gestion),
+                    periodo: parseInt(periodo),
                     paralelo,
                     estado: 'inscrito'
                 }
@@ -304,7 +393,7 @@ class InscripcionController {
     async actualizarInscripcion(req, res, next) {
         try {
             const { id } = req.params;
-            const { estado, paralelo } = req.body;
+            const { estado, paralelo, periodo, gestion } = req.body;
 
             // Verificar que la inscripción existe
             const inscripcionExistente = await executeQuery(
@@ -332,8 +421,19 @@ class InscripcionController {
                 );
 
                 if (notaFinal.length === 0 || notaFinal[0].calificacion < 51) {
-                throw createError('No se puede aprobar sin nota final válida (≥51)', 400);
+                    throw createError('No se puede aprobar sin nota final válida (≥51)', 400);
                 }
+            }
+
+            // Validar que el paralelo y periodo no estén vacíos si se proporcionan
+            if (paralelo !== undefined && paralelo === '') {
+                throw createError('El paralelo no puede estar vacío', 400);
+            }
+            if (periodo !== undefined && (typeof periodo !== 'number' || periodo < 1)) {
+                throw createError('El periodo debe ser un número válido mayor o igual a 1', 400);
+            }
+            if (gestion !== undefined && (typeof gestion !== 'number' || gestion < 2000)) {
+                throw createError('La gestión debe ser un número válido', 400);
             }
 
             // Actualizar inscripción
@@ -348,6 +448,16 @@ class InscripcionController {
             if (paralelo) {
                 updateFields.push('paralelo = ?');
                 updateParams.push(paralelo);
+            }
+
+            if (periodo) {
+                updateFields.push('periodo = ?');
+                updateParams.push(periodo);
+            }
+
+            if (gestion) {
+                updateFields.push('gestion = ?');
+                updateParams.push(gestion);
             }
 
             if (updateFields.length === 0) {
@@ -366,7 +476,7 @@ class InscripcionController {
 
             // Auditar acción
             await auditAction(req, 'inscripciones', 'UPDATE', id, datosAnteriores, {
-                estado, paralelo
+                estado, paralelo, periodo, gestion
             });
 
             res.json({
@@ -375,7 +485,9 @@ class InscripcionController {
                 data: {
                     id_inscripcion: parseInt(id),
                     estado: estado || datosAnteriores.estado,
-                    paralelo: paralelo || datosAnteriores.paralelo
+                    paralelo: paralelo || datosAnteriores.paralelo,
+                    periodo: periodo || datosAnteriores.periodo,
+                    gestion: gestion || datosAnteriores.gestion
                 }
             });
 
@@ -668,47 +780,109 @@ class InscripcionController {
             next(error);
         }
     }
+
+    async cambiarEstado (req, res, next) {
+        try {
+            const { id } = req.params;
+            const { estado, paralelo, periodo, gestion } = req.body;
+
+            // Verificar que la inscripción existe
+            const inscripcionExistente = await executeQuery(
+                'SELECT * FROM inscripciones WHERE id_inscripcion = ?',
+                [id]
+            );
+
+            if (inscripcionExistente.length === 0) {
+                throw createError('Inscripción no encontrada', 404);
+            }
+
+            // Validar estado
+            const estadosValidos = ['inscrito', 'aprobado', 'reprobado', 'abandonado'];
+            if (estado && !estadosValidos.includes(estado)) {
+                throw createError('Estado de inscripción inválido', 400);
+            }
+
+            // Validar que el paralelo y periodo no estén vacíos si se proporcionan
+            if (paralelo !== undefined && paralelo === '') {
+                throw createError('El paralelo no puede estar vacío', 400);
+            }
+            if (periodo !== undefined && (typeof periodo !== 'number' || periodo < 1)) {
+                throw createError('El periodo debe ser un número válido mayor o igual a 1', 400);
+            }
+            if (gestion !== undefined && (typeof gestion !== 'number' || gestion < 2000)) {
+                throw createError('La gestión debe ser un número válido', 400);
+            }
+
+            // Actualizar inscripción
+            let updateFields = [];
+            let updateParams = [];
+
+            if (estado) {
+                updateFields.push('estado = ?');
+                updateParams.push(estado);
+            }
+
+            if (paralelo) {
+                updateFields.push('paralelo = ?');
+                updateParams.push(paralelo);
+            }
+
+            if (periodo) {
+                updateFields.push('periodo = ?');
+                updateParams.push(periodo);
+            }
+
+            if (gestion) {
+                updateFields.push('gestion = ?');
+                updateParams.push(gestion);
+            }
+
+            if (updateFields.length === 0) {
+                throw createError('No hay campos para actualizar', 400);
+            }
+
+            updateFields.push('fecha_actualizacion = CURRENT_TIMESTAMP');
+            updateParams.push(id);
+
+            const query = `
+                UPDATE inscripciones SET ${updateFields.join(', ')}
+                WHERE id_inscripcion = ?
+            `;
+
+            await executeQuery(query, updateParams);
+
+            // Auditar acción
+            await auditAction(req, 'inscripciones', 'UPDATE', id, inscripcionExistente[0], {
+                estado, paralelo, periodo, gestion
+            });
+
+            res.json({
+                success: true,
+                message: 'Estado de inscripción actualizado exitosamente',
+                data: {
+                    id_inscripcion: parseInt(id),
+                    estado: estado || inscripcionExistente[0].estado,
+                    paralelo: paralelo || inscripcionExistente[0].paralelo,
+                    periodo: periodo || inscripcionExistente[0].periodo,
+                    gestion: gestion || inscripcionExistente[0].gestion
+                }
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 const controller = new InscripcionController();
 
 module.exports = {
     listarInscripciones: controller.listarInscripciones.bind(controller),
-    obtenerInscripcion: controller.obtenerInscripcion.bind(controller),
+    obtenerDetalleInscripcion: controller.obtenerDetalleInscripcion.bind(controller),
     crearInscripcion: controller.crearInscripcion.bind(controller),
     actualizarInscripcion: controller.actualizarInscripcion.bind(controller),
     eliminarInscripcion: controller.eliminarInscripcion.bind(controller),
     obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
     obtenerInscripcionesPorMateria: controller.obtenerInscripcionesPorMateria.bind(controller),
-    // Funciones adicionales que pueden faltar
-    inscripcionMasiva: async (req, res, next) => {
-        try {
-            res.json({ 
-                success: false, 
-                message: 'Funcionalidad de inscripción masiva no implementada aún' 
-            });
-        } catch (error) {
-            next(error);
-        }
-    },
-    cambiarEstado: async (req, res, next) => {
-        try {
-            const { id } = req.params;
-            const { estado } = req.body;
-            
-            const query = `
-                UPDATE inscripciones 
-                SET estado = ?, fecha_actualizacion = CURRENT_TIMESTAMP
-                WHERE id_inscripcion = ?
-            `;
-            
-            await executeQuery(query, [estado, id]);
-            res.json({ 
-                success: true, 
-                message: 'Estado de inscripción actualizado exitosamente' 
-            });
-        } catch (error) {
-            next(error);
-        }
-    }
+    cambiarEstado: controller.cambiarEstado.bind(controller),
+    obtenerInscripcionesPorEstudiante: controller.obtenerInscripcionesPorEstudiante.bind(controller),
 };

@@ -1,4 +1,4 @@
-import React from 'react';
+import  { useState, useEffect} from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Home,
@@ -13,13 +13,25 @@ import {
   ClipboardList,
   Award,
   Calendar,
-  Database
+  Database,
+  Lock,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const { user } = useAuth();
   const location = useLocation();
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const [initialized, setInitialized] = useState(false);
+
+  const toggleGroup = (groupName) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupName]: !prev[groupName]
+    }));
+  };
 
   // Configuración de navegación por rol
   const getNavigationItems = () => {
@@ -38,56 +50,99 @@ const Sidebar = ({ isOpen, onClose }) => {
 
     // Administrador
     if (userRoles.includes('administrador')) {
-      items.push(
-        {
-          name: 'Estudiantes',
-          href: '/estudiantes',
-          icon: Users,
-          roles: ['administrador']
-        },
-        {
-          name: 'Docentes',
-          href: '/docentes',
-          icon: UserCheck,
-          roles: ['administrador']
-        },
-        {
-          name: 'Materias',
-          href: '/materias',
-          icon: BookOpen,
-          roles: ['administrador']
-        },
-        {
-          name: 'Menciones',
-          href: '/menciones',
-          icon: GraduationCap,
-          roles: ['administrador']
-        },
-        {
-          name: 'Inscripciones',
-          href: '/inscripciones',
-          icon: ClipboardList,
-          roles: ['administrador']
-        },
-        {
-          name: 'Notas',
-          href: '/notas',
-          icon: Award,
-          roles: ['administrador']
-        },
-        {
-          name: 'Reportes',
-          href: '/reportes',
-          icon: BarChart3,
-          roles: ['administrador']
-        },
-        {
-          name: 'Auditoría',
-          href: '/auditoria',
-          icon: Shield,
-          roles: ['administrador']
-        }
-      );
+      // Grupo de Usuarios
+      items.push({
+        name: 'Usuarios',
+        icon: Users,
+        roles: ['administrador'],
+        isGroup: true,
+        children: [
+          {
+            name: 'Estudiantes',
+            href: '/estudiantes',
+            icon: Users,
+            roles: ['administrador']
+          },
+          {
+            name: 'Docentes',
+            href: '/docentes',
+            icon: UserCheck,
+            roles: ['administrador']
+          }
+        ]
+      });
+
+      // Grupo de Académico
+      items.push({
+        name: 'Académico',
+        icon: BookOpen,
+        roles: ['administrador'],
+        isGroup: true,
+        children: [
+          {
+            name: 'Materias',
+            href: '/materias',
+            icon: BookOpen,
+            roles: ['administrador']
+          },
+          {
+            name: 'Cierre de Materias',
+            href: '/cierre-materias',
+            icon: Lock,
+            roles: ['administrador']
+          },
+          {
+            name: 'Menciones',
+            href: '/menciones',
+            icon: GraduationCap,
+            roles: ['administrador']
+          }
+        ]
+      });
+
+      // Grupo de Gestión Académica
+      items.push({
+        name: 'Gestión Académica',
+        icon: ClipboardList,
+        roles: ['administrador'],
+        isGroup: true,
+        children: [
+          {
+            name: 'Inscripciones',
+            href: '/inscripciones',
+            icon: ClipboardList,
+            roles: ['administrador']
+          },
+          {
+            name: 'Notas',
+            href: '/notas',
+            icon: Award,
+            roles: ['administrador']
+          }
+        ]
+      });
+
+      // Grupo de Sistema
+      items.push({
+        name: 'Sistema',
+        icon: Shield,
+        roles: ['administrador'],
+        isGroup: true,
+        children: [
+          {
+            name: 'Reportes',
+            href: '/reportes',
+            icon: BarChart3,
+            roles: ['administrador']
+          },
+          {
+            name: 'Auditoría',
+            href: '/auditoria',
+            icon: Shield,
+            roles: ['administrador']
+          }
+        ]
+      });
     }
 
     // Docente
@@ -188,6 +243,96 @@ const Sidebar = ({ isOpen, onClose }) => {
     return href !== '/' && location.pathname.startsWith(href);
   };
 
+  const isGroupActive = (group) => {
+    if (!group.children) return false;
+    return group.children.some(child => child.href && isActiveLink(child.href));
+  };
+
+  // Initialize expanded groups based on active items
+  useEffect(() => {
+    if (!initialized) {
+      const initialExpanded = {};
+      navigationItems.forEach(item => {
+        if (item.isGroup && isGroupActive(item)) {
+          initialExpanded[item.name] = true;
+        }
+      });
+      setExpandedGroups(initialExpanded);
+      setInitialized(true);
+    }
+  }, [navigationItems, initialized, location.pathname]);
+
+  // Update expanded groups when location changes
+  useEffect(() => {
+    if (initialized) {
+      const updatedExpanded = {};
+      navigationItems.forEach(item => {
+        if (item.isGroup) {
+          if (isGroupActive(item)) {
+            updatedExpanded[item.name] = true;
+          } else if (expandedGroups[item.name] === true) {
+            updatedExpanded[item.name] = true;
+          }
+        }
+      });
+      setExpandedGroups(updatedExpanded);
+    }
+  }, [location.pathname]);
+
+  const renderMenuItem = (item) => {
+    const Icon = item.icon;
+    const isActive = item.href ? isActiveLink(item.href) : false;
+
+    if (item.isGroup) {
+      const isExpanded = expandedGroups[item.name] === true;
+      const groupActive = isGroupActive(item);
+
+      return (
+        <div key={item.name} className="mb-2">
+          <button
+            onClick={() => toggleGroup(item.name)}
+            className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+              groupActive
+                ? 'bg-primary-50 text-primary-700'
+                : 'text-secondary-700 hover:bg-secondary-100 hover:text-secondary-900'
+            }`}
+          >
+            <div className="flex items-center">
+              <Icon className={`w-5 h-5 mr-3 flex-shrink-0 ${groupActive ? 'text-primary-600' : 'text-secondary-500'}`} />
+              <span className="truncate">{item.name}</span>
+            </div>
+            <ChevronRight className={`w-4 h-4 text-secondary-400 transition-transform duration-200 ${
+              isExpanded ? 'transform -rotate-90' : 'transform rotate-90'
+            }`} />
+          </button>
+          <div className={`overflow-hidden transition-all duration-200 ease-in-out ${
+            isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+          }`}>
+            <div className="mt-1 ml-4 space-y-1 pb-1">
+              {item.children.map(child => renderMenuItem(child))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <Link
+        key={item.name}
+        to={item.href}
+        onClick={onClose}
+        className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+          isActive
+            ? 'bg-primary-100 text-primary-700 border-r-2 border-primary-600'
+            : 'text-secondary-700 hover:bg-secondary-100 hover:text-secondary-900'
+        }`}
+      >
+        <Icon className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-secondary-500'}`} />
+        <span className="truncate">{item.name}</span>
+      </Link>
+    );
+  };
+
   return (
     <>
       {/* Overlay para móvil */}
@@ -220,26 +365,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
           {/* Navegación */}
           <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar min-h-0">
-            {navigationItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = isActiveLink(item.href);
-              
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  onClick={onClose}
-                  className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-primary-100 text-primary-700 border-r-2 border-primary-600'
-                      : 'text-secondary-700 hover:bg-secondary-100 hover:text-secondary-900'
-                  }`}
-                >
-                  <Icon className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-secondary-500'}`} />
-                  <span className="truncate">{item.name}</span>
-                </Link>
-              );
-            })}
+            {navigationItems.map((item) => renderMenuItem(item))}
           </nav>
 
           {/* Footer del sidebar */}

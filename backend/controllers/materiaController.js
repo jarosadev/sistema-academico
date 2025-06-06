@@ -1,4 +1,4 @@
-const { executeQuery } = require('../config/database');
+const { executeQuery, getConnection } = require('../config/database');
 const { createError } = require('../middleware/errorHandler');
 const { auditAction } = require('../middleware/audit-complete');
 
@@ -504,7 +504,7 @@ class MateriaController {
     }
 
     /**
-     * Obtener prerequisitos de una materia (funcionalidad futura)
+     * Obtener prerequisitos de una materia
      */
     async obtenerPrerequisitos(req, res, next) {
         try {
@@ -524,20 +524,11 @@ class MateriaController {
             next(error);
         }
     }
-}
 
-const controller = new MateriaController();
-
-module.exports = {
-    listarMaterias: controller.listarMaterias.bind(controller),
-    obtenerMateria: controller.obtenerMateria.bind(controller),
-    crearMateria: controller.crearMateria.bind(controller),
-    actualizarMateria: controller.actualizarMateria.bind(controller),
-    eliminarMateria: controller.eliminarMateria.bind(controller),
-    obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
-    obtenerMateriasPorMencion: controller.obtenerMateriasPorMencion.bind(controller),
-    obtenerPrerequisitos: controller.obtenerPrerequisitos.bind(controller),
-    obtenerDocentesMateria: async (req, res, next) => {
+    /**
+     * Obtener docentes asignados a una materia
+     */
+    async obtenerDocentesMateria(req, res, next) {
         try {
             const { id } = req.params;
             const query = `
@@ -559,8 +550,12 @@ module.exports = {
         } catch (error) {
             next(error);
         }
-    },
-    obtenerInscripcionesMateria: async (req, res, next) => {
+    }
+
+    /**
+     * Obtener inscripciones de una materia
+     */
+    async obtenerInscripcionesMateria(req, res, next) {
         try {
             const { id } = req.params;
             const { gestion = new Date().getFullYear() } = req.query;
@@ -581,9 +576,12 @@ module.exports = {
         } catch (error) {
             next(error);
         }
-    },
+    }
 
-    obtenerParalelosMateria: async (req, res, next) => {
+    /**
+     * Obtener paralelos de una materia
+     */
+    async obtenerParalelosMateria(req, res, next) {
         try {
             const { id } = req.params;
             const { gestion = new Date().getFullYear() } = req.query;
@@ -602,9 +600,12 @@ module.exports = {
             const query = `
                 SELECT DISTINCT 
                     dm.paralelo,
+                    dm.cerrado,
+                    dm.fecha_cierre,
                     COUNT(i.id_inscripcion) as estudiantes_inscritos,
                     d.nombre as docente_nombre,
-                    d.apellido as docente_apellido
+                    d.apellido as docente_apellido,
+                    d.id_docente
                 FROM docente_materias dm
                 LEFT JOIN docentes d ON dm.id_docente = d.id_docente
                 LEFT JOIN inscripciones i ON i.id_materia = dm.id_materia 
@@ -612,7 +613,7 @@ module.exports = {
                     AND i.gestion = dm.gestion
                 WHERE dm.id_materia = ? 
                     AND dm.gestion = ?
-                GROUP BY dm.paralelo, d.id_docente
+                GROUP BY dm.paralelo, dm.cerrado, dm.fecha_cierre, d.nombre, d.apellido, d.id_docente
                 ORDER BY dm.paralelo ASC
             `;
 
@@ -627,4 +628,430 @@ module.exports = {
             next(error);
         }
     }
+
+    /**
+     * Cerrar materia por docente o administrador
+     * Actualiza el estado de todos los estudiantes inscritos en la materia
+     */
+    async cerrarMateria(req, res, next) {
+        const connection = await getConnection();
+        
+        try {
+            const { id } = req.params;
+            const { gestion, periodo, paralelo } = req.body;
+            const userId = req.user.id_usuario;
+            const userRoles = req.user.roles || [];
+
+            await connection.beginTransaction();
+
+            let idDocente = null;
+            const esAdministrador = userRoles.some(role => {
+                if (typeof role === 'string') {
+                    return role.toLowerCase() === 'administrador';
+                } else if (typeof role === 'object' && role.nombre) {
+                    return role.nombre.toLowerCase() === 'administrador';
+                }
+                return false;
+            });
+
+            if (esAdministrador) {
+                const docenteAsignadoQuery = await connection.execute(
+                    `SELECT id_docente FROM docente_materias 
+                    WHERE id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?`,
+                    [id, gestion, periodo, paralelo]
+                );
+
+                if (docenteAsignadoQuery[0].length === 0) {
+                    throw createError('No hay docente asignado a esta materia', 404);
+                }
+
+                idDocente = docenteAsignadoQuery[0][0].id_docente;
+            } else {
+                const docenteQuery = await connection.execute(
+                    'SELECT id_docente FROM docentes WHERE id_usuario = ?',
+                    [userId]
+                );
+
+                if (docenteQuery[0].length === 0) {
+                    throw createError('Usuario no es docente', 403);
+                }
+
+                idDocente = docenteQuery[0][0].id_docente;
+
+                const asignacionQuery = await connection.execute(
+                    `SELECT * FROM docente_materias 
+                    WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?`,
+                    [idDocente, id, gestion, periodo, paralelo]
+                );
+
+                if (asignacionQuery[0].length === 0) {
+                    throw createError('No está asignado a esta materia', 403);
+                }
+            }
+
+            const estadoMateriaQuery = await connection.execute(
+                `SELECT cerrado FROM docente_materias 
+                WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?`,
+                [idDocente, id, gestion, periodo, paralelo]
+            );
+
+            if (estadoMateriaQuery[0][0].cerrado) {
+                throw createError('La materia ya ha sido cerrada', 400);
+            }
+
+            const inscripcionesQuery = await connection.execute(
+                `SELECT i.id_inscripcion, i.id_estudiante
+                FROM inscripciones i
+                WHERE i.id_materia = ? AND i.gestion = ? AND i.periodo = ? AND i.paralelo = ? AND i.estado = 'inscrito'`,
+                [id, gestion, periodo, paralelo]
+            );
+
+            const notaAprobacion = 51.00;
+            let estadisticasActualizacion = {
+                aprobados: 0,
+                reprobados: 0,
+                abandonados: 0
+            };
+
+            for (const inscripcion of inscripcionesQuery[0]) {
+                const notasQuery = await connection.execute(
+                    `SELECT COALESCE(SUM(n.calificacion * te.porcentaje / 100), 0) as nota_final,
+                            COUNT(n.id_nota) as cantidad_notas
+                    FROM notas n
+                    INNER JOIN tipos_evaluacion te ON n.id_tipo_evaluacion = te.id_tipo_evaluacion
+                    WHERE n.id_inscripcion = ? AND te.activo = TRUE`,
+                    [inscripcion.id_inscripcion]
+                );
+
+                const notaFinal = notasQuery[0][0].nota_final;
+                const cantidadNotas = notasQuery[0][0].cantidad_notas;
+
+                let estado = 'reprobado';
+                if (cantidadNotas === 0) {
+                    estado = 'abandonado';
+                    estadisticasActualizacion.abandonados++;
+                } else if (notaFinal >= notaAprobacion) {
+                    estado = 'aprobado';
+                    estadisticasActualizacion.aprobados++;
+                } else {
+                    estadisticasActualizacion.reprobados++;
+                }
+
+                // Remove update to nota_final column as it does not exist
+                await connection.execute(
+                    `UPDATE inscripciones 
+                    SET estado = ?, fecha_actualizacion = CURRENT_TIMESTAMP
+                    WHERE id_inscripcion = ?`,
+                    [estado, inscripcion.id_inscripcion]
+                );
+
+                await connection.execute(
+                    `CALL sp_actualizar_historial_academico(?, ?)`,
+                    [inscripcion.id_estudiante, gestion]
+                );
+            }
+
+            await connection.execute(
+                `UPDATE docente_materias
+                SET cerrado = TRUE, fecha_cierre = CURRENT_TIMESTAMP, cerrado_por = ?
+                WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?`,
+                [userId, idDocente, id, gestion, periodo, paralelo]
+            );
+
+            await auditAction(req, 'docente_materias', 'UPDATE', null, 
+                { cerrado: false }, 
+                { 
+                    cerrado: true,
+                    accion: 'cierre_materia',
+                    id_docente: idDocente,
+                    id_materia: id,
+                    gestion: gestion,
+                    periodo: periodo,
+                    paralelo: paralelo,
+                    estudiantes_actualizados: inscripcionesQuery[0].length,
+                    estadisticas: estadisticasActualizacion,
+                    cerrado_por: esAdministrador ? 'Administrador' : 'Docente'
+                }
+            );
+
+            await connection.commit();
+
+            const estadisticasQuery = await executeQuery(
+                `SELECT 
+                    COUNT(*) as total_estudiantes,
+                    COUNT(CASE WHEN estado = 'aprobado' THEN 1 END) as aprobados,
+                    COUNT(CASE WHEN estado = 'reprobado' THEN 1 END) as reprobados,
+                    COUNT(CASE WHEN estado = 'abandonado' THEN 1 END) as abandonados
+                FROM inscripciones
+                WHERE id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?`,
+                [id, gestion, periodo, paralelo]
+            );
+
+            res.json({
+                success: true,
+                message: 'Materia cerrada exitosamente',
+                data: {
+                    estadisticas: estadisticasQuery[0],
+                    cerrado_por: esAdministrador ? 'Administrador' : 'Docente'
+                }
+            });
+
+        } catch (error) {
+            await connection.rollback();
+            next(error);
+        } finally {
+            connection.release();
+        }
+    }
+
+    /**
+     * Obtener estado de cierre de materias para un docente o administrador
+     */
+    async obtenerEstadoCierreMaterias(req, res, next) {
+        try {
+            const userId = req.user.id_usuario;
+            const userRoles = req.user.roles || [];
+            const {
+                gestion = '',
+                periodo = '',
+                estado = '',
+                search = '',
+                page = 1,
+                limit = 10
+            } = req.query;
+
+            const offset = (parseInt(page) - 1) * parseInt(limit);
+            const limitNum = Math.min(parseInt(limit), 100);
+
+            // Check if user has Administrator role
+            const esAdministrador = userRoles.some(role => {
+                if (typeof role === 'string') {
+                    return role.toLowerCase() === 'administrador';
+                } else if (typeof role === 'object' && role.nombre) {
+                    return role.nombre.toLowerCase() === 'administrador';
+                }
+                return false;
+            });
+
+            let whereConditions = [];
+            let queryParams = [];
+
+            if (esAdministrador) {
+                // Administrador puede ver todas las materias
+                if (gestion) {
+                    whereConditions.push('dm.gestion = ?');
+                    queryParams.push(gestion);
+                }
+                if (periodo) {
+                    whereConditions.push('dm.periodo = ?');
+                    queryParams.push(periodo);
+                }
+            } else {
+                // Docente solo ve sus materias
+                const docenteQuery = await executeQuery(
+                    'SELECT id_docente FROM docentes WHERE id_usuario = ?',
+                    [userId]
+                );
+
+                if (docenteQuery.length === 0) {
+                    return res.json({
+                        success: true,
+                        data: [],
+                        message: 'Usuario no tiene rol de docente'
+                    });
+                }
+
+                const idDocente = docenteQuery[0].id_docente;
+                whereConditions.push('dm.id_docente = ?');
+                queryParams.push(idDocente);
+
+                if (gestion) {
+                    whereConditions.push('dm.gestion = ?');
+                    queryParams.push(gestion);
+                }
+                if (periodo) {
+                    whereConditions.push('dm.periodo = ?');
+                    queryParams.push(periodo);
+                }
+            }
+
+            // Estado filter
+            if (estado) {
+                if (estado === 'cerrado') {
+                    whereConditions.push('dm.cerrado = TRUE');
+                } else if (estado === 'abierto') {
+                    whereConditions.push('dm.cerrado = FALSE');
+                }
+            }
+
+            // Search filter
+            if (search) {
+                const searchTerm = `%${search}%`;
+                if (esAdministrador) {
+                    whereConditions.push('(m.nombre LIKE ? OR m.sigla LIKE ? OR d.nombre LIKE ? OR d.apellido LIKE ?)');
+                    queryParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
+                } else {
+                    whereConditions.push('(m.nombre LIKE ? OR m.sigla LIKE ?)');
+                    queryParams.push(searchTerm, searchTerm);
+                }
+            }
+
+            const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+
+            // Count total for pagination
+            const countQuery = `
+                SELECT COUNT(DISTINCT dm.id_docente, dm.id_materia, dm.gestion, dm.periodo, dm.paralelo) as total
+                FROM docente_materias dm
+                INNER JOIN materias m ON dm.id_materia = m.id_materia
+                INNER JOIN docentes d ON dm.id_docente = d.id_docente
+                ${whereClause}
+            `;
+
+            const countResult = await executeQuery(countQuery, queryParams);
+            const total = countResult[0].total;
+            const totalPages = Math.ceil(total / limitNum);
+
+            // Main query with pagination
+            const mainQuery = `
+                SELECT 
+                    dm.*,
+                    m.nombre as materia_nombre,
+                    m.sigla as materia_sigla,
+                    m.semestre,
+                    d.nombre as docente_nombre,
+                    d.apellido as docente_apellido,
+                    COUNT(i.id_inscripcion) as total_estudiantes,
+                    COUNT(CASE WHEN i.estado = 'aprobado' THEN 1 END) as aprobados,
+                    COUNT(CASE WHEN i.estado = 'reprobado' THEN 1 END) as reprobados,
+                    COUNT(CASE WHEN i.estado = 'abandonado' THEN 1 END) as abandonados,
+                    COUNT(CASE WHEN i.estado = 'inscrito' THEN 1 END) as inscritos
+                FROM docente_materias dm
+                INNER JOIN materias m ON dm.id_materia = m.id_materia
+                INNER JOIN docentes d ON dm.id_docente = d.id_docente
+                LEFT JOIN inscripciones i ON i.id_materia = dm.id_materia 
+                    AND i.gestion = dm.gestion 
+                    AND i.periodo = dm.periodo 
+                    AND i.paralelo = dm.paralelo
+                ${whereClause}
+                GROUP BY dm.id_docente, dm.id_materia, dm.gestion, dm.periodo, dm.paralelo
+                ORDER BY m.nombre, dm.paralelo
+                LIMIT ? OFFSET ?
+            `;
+
+            queryParams.push(limitNum, offset);
+
+            const materias = await executeQuery(mainQuery, queryParams);
+
+            res.json({
+                success: true,
+                data: materias,
+                pagination: {
+                    page: parseInt(page),
+                    limit: limitNum,
+                    total,
+                    totalPages,
+                    hasNext: page < totalPages,
+                    hasPrev: page > 1
+                }
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * Abrir/reabrir materia (solo administradores)
+     */
+    async abrirMateria(req, res, next) {
+        try {
+            const { id } = req.params;
+            const { gestion, periodo, paralelo, idDocente } = req.body;
+
+            // Verificar que es administrador
+            const userRoles = req.user.roles || [];
+            const esAdministrador = userRoles.some(role => {
+                if (typeof role === 'string') {
+                    return role.toLowerCase() === 'administrador';
+                } else if (typeof role === 'object' && role.nombre) {
+                    return role.nombre.toLowerCase() === 'administrador';
+                }
+                return false;
+            });
+
+            if (!esAdministrador) {
+                throw createError('Solo los administradores pueden abrir materias', 403);
+            }
+
+            // Verificar que la materia-docente existe
+            const asignacionQuery = await executeQuery(
+                `SELECT * FROM docente_materias 
+                WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?`,
+                [idDocente, id, gestion, periodo, paralelo]
+            );
+
+            if (asignacionQuery.length === 0) {
+                throw createError('Asignación docente-materia no encontrada', 404);
+            }
+
+            // Abrir la materia
+            await executeQuery(
+                `UPDATE docente_materias
+                SET cerrado = FALSE, fecha_cierre = NULL, cerrado_por = NULL
+                WHERE id_docente = ? AND id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?`,
+                [idDocente, id, gestion, periodo, paralelo]
+            );
+
+            // Cambiar estado de inscripciones a 'inscrito'
+            await executeQuery(
+                `UPDATE inscripciones
+                SET estado = 'inscrito'
+                WHERE id_materia = ? AND gestion = ? AND periodo = ? AND paralelo = ?`,
+                [id, gestion, periodo, paralelo]
+            );
+
+            // Auditar acción
+            await auditAction(req, 'docente_materias', 'UPDATE', null,
+                { cerrado: true },
+                { 
+                    cerrado: false,
+                    accion: 'apertura_materia',
+                    id_docente: idDocente,
+                    id_materia: id,
+                    gestion: gestion,
+                    periodo: periodo,
+                    paralelo: paralelo
+                }
+            );
+
+            res.json({
+                success: true,
+                message: 'Materia abierta exitosamente'
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+}
+
+// Crear instancia del controlador
+const controller = new MateriaController();
+
+// Exportar métodos
+module.exports = {
+    listarMaterias: controller.listarMaterias.bind(controller),
+    obtenerMateria: controller.obtenerMateria.bind(controller),
+    crearMateria: controller.crearMateria.bind(controller),
+    actualizarMateria: controller.actualizarMateria.bind(controller),
+    eliminarMateria: controller.eliminarMateria.bind(controller),
+    obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
+    obtenerMateriasPorMencion: controller.obtenerMateriasPorMencion.bind(controller),
+    obtenerPrerequisitos: controller.obtenerPrerequisitos.bind(controller),
+    obtenerDocentesMateria: controller.obtenerDocentesMateria.bind(controller),
+    obtenerInscripcionesMateria: controller.obtenerInscripcionesMateria.bind(controller),
+    obtenerParalelosMateria: controller.obtenerParalelosMateria.bind(controller),
+    cerrarMateria: controller.cerrarMateria.bind(controller),
+    obtenerEstadoCierreMaterias: controller.obtenerEstadoCierreMaterias.bind(controller),
+    abrirMateria: controller.abrirMateria.bind(controller)
 };

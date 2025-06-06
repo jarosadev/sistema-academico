@@ -44,17 +44,27 @@ router.get('/:id',
 /**
  * @route POST /api/notas
  * @desc Registrar nueva nota
- * @access Docente (solo para sus materias asignadas)
+ * @access Administrador, Docente
  */
 router.post('/', 
-    requireRole(['docente']), 
+    requireRole(['administrador', 'docente']), 
     notaController.registrarNota
+);
+
+/**
+ * @route POST /api/notas/masivo
+ * @desc Registro masivo de notas
+ * @access Administrador, Docente
+ */
+router.post('/masivo', 
+    requireRole(['administrador', 'docente']), 
+    notaController.registroMasivo
 );
 
 /**
  * @route PUT /api/notas/:id
  * @desc Actualizar nota existente
- * @access Docente (solo sus propias notas), Administrador
+ * @access Administrador, Docente (solo sus propias notas)
  */
 router.put('/:id', 
     requireRole(['administrador', 'docente']), 
@@ -64,7 +74,7 @@ router.put('/:id',
 /**
  * @route DELETE /api/notas/:id
  * @desc Eliminar nota
- * @access Docente (solo sus propias notas), Administrador
+ * @access Administrador, Docente (solo sus propias notas)
  */
 router.delete('/:id', 
     requireRole(['administrador', 'docente']), 
@@ -73,7 +83,7 @@ router.delete('/:id',
 
 /**
  * @route GET /api/notas/inscripcion/:id_inscripcion
- * @desc Obtener todas las notas de una inscripción específica
+ * @desc Obtener notas de una inscripción
  * @access Administrador, Docente, Estudiante (solo sus propias notas)
  */
 router.get('/inscripcion/:id_inscripcion', 
@@ -82,13 +92,13 @@ router.get('/inscripcion/:id_inscripcion',
 );
 
 /**
- * @route POST /api/notas/masivo
- * @desc Registro masivo de notas
- * @access Docente (solo para sus materias)
+ * @route GET /api/notas/materia/:id_materia
+ * @desc Obtener notas por materia
+ * @access Administrador, Docente
  */
-router.post('/masivo', 
-    requireRole(['docente']), 
-    notaController.registroMasivo
+router.get('/materia/:id_materia',
+    requireRole(['administrador', 'docente']),
+    notaController.obtenerNotasPorMateria
 );
 
 module.exports = router;
