@@ -746,6 +746,46 @@ class DocenteController {
             next(error);
         }
     }
+
+    async obtenerPerfil(req, res, next){
+        try {
+            const id_usuario = req.user.id_usuario;
+
+            const query = `
+                SELECT 
+                    d.id_docente,
+                    d.nombre,
+                    d.apellido,
+                    d.ci,
+                    d.especialidad,
+                    d.telefono,
+                    d.activo,
+                    d.fecha_contratacion,
+                    u.correo,
+                    u.ultimo_acceso,
+                    COUNT(DISTINCT dm.id_materia) as materias_asignadas
+                FROM docentes d
+                LEFT JOIN usuarios u ON d.id_usuario = u.id_usuario
+                LEFT JOIN docente_materias dm ON d.id_docente = dm.id_docente
+                WHERE d.id_usuario = ?
+                GROUP BY d.id_docente
+            `;
+
+            const docentes = await executeQuery(query, [id_usuario]);
+
+            if (docentes.length === 0) {
+                throw createError('Perfil de docente no encontrado', 404);
+            }
+
+            res.json({
+                success: true,
+                data: docentes[0]
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 const controller = new DocenteController();
@@ -761,5 +801,6 @@ module.exports = {
     removerMateria: controller.removerMateria.bind(controller),
     obtenerMateriasPorDocente: controller.obtenerMateriasPorDocente.bind(controller),
     obtenerEstudiantesPorDocente: controller.obtenerEstudiantesPorDocente.bind(controller),
-    obtenerCargaAcademica: controller.obtenerCargaAcademica.bind(controller)
+    obtenerCargaAcademica: controller.obtenerCargaAcademica.bind(controller),
+    obtenerPerfil: controller.obtenerPerfil.bind(controller)
 };

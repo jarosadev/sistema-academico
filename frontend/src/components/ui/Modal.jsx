@@ -100,72 +100,77 @@ const Modal = ({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${overlayClassName}`}
+      className={`fixed inset-0 z-50 ${overlayClassName}`}
       onClick={handleOverlayClick}
     >
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black bg-opacity-50 transition-opacity" />
+      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" />
       
-      {/* Modal */}
-      <div
-        ref={modalRef}
-        className={`
-          relative bg-white rounded-lg shadow-xl max-h-full overflow-hidden
-          ${sizeClasses[size]}
-          ${className}
-        `}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={title ? 'modal-title' : undefined}
-      >
-        {/* Header */}
-        {(title || showCloseButton) && (
-          <div className={`
-            flex items-center justify-between p-6 border-b border-secondary-200
-            ${headerClassName}
-          `}>
-            {title && (
-              <h2 
-                id="modal-title"
-                className="text-xl font-semibold text-secondary-900"
-              >
-                {title}
-              </h2>
+      {/* Modal Container */}
+      <div className="fixed inset-0 overflow-y-auto">
+        <div className="flex min-h-full items-center justify-center p-4">
+          {/* Modal */}
+          <div
+            ref={modalRef}
+            className={`
+              relative bg-white rounded-lg shadow-xl max-h-[calc(100vh-2rem)] overflow-hidden
+              ${sizeClasses[size]}
+              ${className}
+            `}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={title ? 'modal-title' : undefined}
+          >
+            {/* Header */}
+            {(title || showCloseButton) && (
+              <div className={`
+                flex items-center justify-between p-6 border-b border-secondary-200
+                ${headerClassName}
+              `}>
+                {title && (
+                  <h2 
+                    id="modal-title"
+                    className="text-xl font-semibold text-secondary-900"
+                  >
+                    {title}
+                  </h2>
+                )}
+                
+                {showCloseButton && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClose}
+                    disabled={preventClose}
+                    className="ml-auto -mr-2"
+                    aria-label="Cerrar modal"
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                )}
+              </div>
             )}
-            
-            {showCloseButton && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClose}
-                disabled={preventClose}
-                className="ml-auto -mr-2"
-                aria-label="Cerrar modal"
-              >
-                <X className="w-5 h-5" />
-              </Button>
+
+            {/* Body */}
+            <div className={`
+              flex-1 overflow-y-auto p-6
+              ${bodyClassName}
+            `}>
+              {children}
+            </div>
+
+            {/* Footer */}
+            {footer && (
+              <div className={`
+                flex items-center justify-end space-x-3 p-6 border-t border-secondary-200 bg-secondary-50
+                ${footerClassName}
+              `}>
+                {footer}
+              </div>
             )}
           </div>
-        )}
-
-        {/* Body */}
-        <div className={`
-          flex-1 overflow-y-auto p-6
-          ${bodyClassName}
-        `}>
-          {children}
         </div>
-
-        {/* Footer */}
-        {footer && (
-          <div className={`
-            flex items-center justify-end space-x-3 p-6 border-t border-secondary-200 bg-secondary-50
-            ${footerClassName}
-          `}>
-            {footer}
-          </div>
-        )}
       </div>
     </div>
   );

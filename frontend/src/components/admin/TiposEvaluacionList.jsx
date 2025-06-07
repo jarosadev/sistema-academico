@@ -26,7 +26,7 @@ const TiposEvaluacionList = ({ materiaId }) => {
 
         try {
             setLoading(true);
-            const response = await dataService.tiposEvaluacion.obtenerTodos(materiaId);
+            const response = await dataService.tiposEvaluacion.obtenerPorMateria(materiaId);
             setTiposEvaluacion(response.data);
             setTotalPorcentaje(calcularTotalPorcentaje(response.data));
         } catch (error) {

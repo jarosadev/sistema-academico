@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Calendar, Edit, Save, X, GraduationCap, BookOpen, Lock, Shield, Clock, LogOut, Award, Briefcase, Users, School } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -12,6 +12,9 @@ import { useFormValidation, commonRules } from '../../utils/validation';
 
 const ProfileView = () => {
   const { user, updateProfile } = useAuth();
+  const isAdmin = user?.roles?.some(role => role.nombre === 'administrador');
+  const isDocente = user?.roles?.some(role => role.nombre === 'docente');
+  const isEstudiante = user?.roles?.some(role => role.nombre === 'estudiante');
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -30,7 +33,6 @@ const ProfileView = () => {
     telefono: [commonRules.phone]
   });
 
-  // Inicializar datos del formulario cuando se carga el usuario
   useEffect(() => {
     if (user) {
       setFormData({
@@ -48,9 +50,7 @@ const ProfileView = () => {
       ...prev,
       [name]: value
     }));
-    
     validateField(name, value);
-    
     if (error) setError('');
     if (success) setSuccess('');
   };
@@ -65,29 +65,22 @@ const ProfileView = () => {
     setIsEditing(false);
     setError('');
     setSuccess('');
-    
-    // Restaurar datos originales
     if (user) {
       setFormData({
         nombre: user.nombre || '',
         apellido: user.apellido || '',
         telefono: user.telefono || '',
-        direccion: user.direccion || ''
+        direccion: isEstudiante ? (user.direccion || '') : ''
       });
     }
   };
 
   const handleSave = async () => {
-    if (!validate(formData)) {
-      return;
-    }
-
+    if (!validate(formData)) return;
     setIsLoading(true);
     setError('');
-
     try {
       const result = await updateProfile(formData);
-      
       if (result.success) {
         setSuccess('Perfil actualizado correctamente');
         setIsEditing(false);
@@ -116,19 +109,434 @@ const ProfileView = () => {
 
   const getRoleDisplayName = (roles) => {
     if (!roles || roles.length === 0) return 'Sin rol asignado';
-    
     const roleNames = {
       administrador: 'Administrador',
       docente: 'Docente',
       estudiante: 'Estudiante'
     };
-    
     return roles.map(role => roleNames[role.nombre] || role.nombre).join(', ');
   };
 
+  const renderUserAvatar = () => {
+    const isAdmin = user?.roles?.some(role => role.nombre === 'administrador');
+    return (
+      <div className="flex flex-col items-center space-y-4">
+        <div
+          className={`w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold 
+          ${isAdmin ? 'bg-gradient-to-br from-indigo-600 to-purple-600 shadow-lg shadow-indigo-200' : helpers.getAvatarColor(user.nombre + ' ' + user.apellido)}`}
+        >
+          {isAdmin ? 'A' : helpers.getInitials(user.nombre + ' ' + user.apellido)}
+        </div>
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-secondary-900">
+            {isAdmin ? 'Admin' : `${user.nombre} ${user.apellido}`}
+          </h2>
+          <p className="text-secondary-600 font-medium">
+            {getRoleDisplayName(user.roles)}
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPersonalInfo = () => (
+    <div className="space-y-4">
+      {isEditing ? (
+        <>
+          <Input
+            label="Nombre"
+            name="nombre"
+            value={formData.nombre}
+            onChange={handleChange}
+            icon={<User />}
+            error={getFieldError('nombre')}
+            required
+          />
+          
+          <Input
+            label="Apellido"
+            name="apellido"
+            value={formData.apellido}
+            onChange={handleChange}
+            icon={<User />}
+            error={getFieldError('apellido')}
+            required
+          />
+        </>
+      ) : (
+        <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+          <div className="flex items-center space-x-3">
+            <User className="w-5 h-5 text-secondary-400" />
+            <div>
+              <p className="text-sm text-secondary-600">Nombre completo</p>
+              <p className="font-medium">{isAdmin ? 'Admin' : `${user.nombre} ${user.apellido}`}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+        <div className="flex items-center space-x-3">
+          <Mail className="w-5 h-5 text-secondary-400" />
+          <div>
+            <p className="text-sm text-secondary-600">Correo electrónico</p>
+            <p className="font-medium">{user.correo}</p>
+          </div>
+        </div>
+      </div>
+
+      {user.ci && (
+        <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+          <div className="flex items-center space-x-3">
+            <div className="w-5 h-5 flex items-center justify-center">
+              <span className="text-xs font-bold text-secondary-400">CI</span>
+            </div>
+            <div>
+              <p className="text-sm text-secondary-600">Cédula de Identidad</p>
+              <p className="font-medium">{user.ci}</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderContactInfo = () => (
+    <div className="space-y-4">
+      {isEditing ? (
+        <>
+          <Input
+            label="Teléfono"
+            name="telefono"
+            value={formData.telefono}
+            onChange={handleChange}
+            icon={<Phone />}
+            error={getFieldError('telefono')}
+            placeholder="70123456"
+          />
+          
+          {isEstudiante && (
+            <Input
+              label="Dirección"
+              name="direccion"
+              value={formData.direccion}
+              onChange={handleChange}
+              icon={<MapPin />}
+              placeholder="Tu dirección completa"
+            />
+          )}
+        </>
+      ) : (
+        <>
+          {user.telefono && (
+            <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+              <div className="flex items-center space-x-3">
+                <Phone className="w-5 h-5 text-secondary-400" />
+                <div>
+                  <p className="text-sm text-secondary-600">Teléfono</p>
+                  <p className="font-medium">{user.telefono}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isEstudiante && user.direccion && (
+            <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+              <div className="flex items-center space-x-3">
+                <MapPin className="w-5 h-5 text-secondary-400" />
+                <div>
+                  <p className="text-sm text-secondary-600">Dirección</p>
+                  <p className="font-medium">{user.direccion}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  const renderAdminView = () => (
+    <div className="grid grid-cols-1 gap-6">
+      <Card className="overflow-hidden border-0 shadow-lg">
+        <div className=" p-6 ">
+          <div className="flex justify-between items-center">
+            <div className="">
+              <h1 className="text-lg font-bold">Información Administrador</h1>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowChangePassword(true)}
+              className="bg-white hover:bg-indigo-50 text-indigo-600"
+            >
+              <Lock className="w-4 h-4 mr-2" />
+              Cambiar Contraseña
+            </Button>
+          </div>
+        </div>
+        
+        <Card.Content className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 h-full">
+            {/* Avatar Section */}
+            <div className="md:col-span-1 h-full">
+              <div className="bg-white p-6 rounded-xl shadow-md border border-indigo-100 hover:shadow-lg transition-shadow duration-300 h-full flex flex-col justify-center">
+                {renderUserAvatar()}
+              </div>
+            </div>
+
+            {/* Information Sections */}
+            <div className="md:col-span-2 h-full">
+              {/* Personal Information */}
+              <div className="bg-white p-4 rounded-xl shadow-md border border-blue-100 hover:shadow-lg transition-shadow duration-300 h-full">
+                <h3 className="text-lg font-semibold text-indigo-900 mb-4 flex items-center">
+                  <Shield className="w-5 h-5 mr-2 text-indigo-500" />
+                  Información Personal
+                </h3>
+                {renderPersonalInfo()}
+              </div>
+
+             
+            </div>
+          </div>
+        </Card.Content>
+      </Card>
+    </div>
+  );
+
+  const renderDocenteView = () => (
+    <Card>
+      <Card.Header>
+        <div className="flex justify-between items-center">
+          <div>
+            <Card.Title>Información del Docente</Card.Title>
+          </div>
+          <div className="flex space-x-2">
+            {!isEditing ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<Edit />}
+                  onClick={handleEdit}
+                >
+                  Editar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowChangePassword(true)}
+                >
+                  Cambiar Contraseña
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<X />}
+                  onClick={handleCancel}
+                  disabled={isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  icon={<Save />}
+                  onClick={handleSave}
+                  loading={isLoading}
+                  disabled={isLoading}
+                >
+                  Guardar
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </Card.Header>
+
+      <Card.Content>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="md:col-span-2">
+            {renderUserAvatar()}
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-lg border border-secondary-100">
+              <h3 className="text-lg font-medium text-secondary-900 mb-4">Información Personal</h3>
+              {renderPersonalInfo()}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-lg border border-secondary-100">
+              <h3 className="text-lg font-medium text-secondary-900 mb-4">Información de Contacto</h3>
+              {renderContactInfo()}
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <div className="bg-white p-6 rounded-lg border border-secondary-100">
+              <h3 className="text-lg font-medium text-secondary-900 mb-4">Información Académica</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+                  <div className="flex items-center space-x-3">
+                    <Award className="w-5 h-5 text-secondary-400" />
+                    <div>
+                      <p className="text-sm text-secondary-600">Especialidad</p>
+                      <p className="font-medium">{user.especialidad || 'No especificada'}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+                  <div className="flex items-center space-x-3">
+                    <Calendar className="w-5 h-5 text-secondary-400" />
+                    <div>
+                      <p className="text-sm text-secondary-600">Fecha de Contratación</p>
+                      <p className="font-medium">
+                        {user.fecha_contratacion
+                          ? helpers.formatDate(user.fecha_contratacion, 'long')
+                          : 'No registrada'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+                  <div className="flex items-center space-x-3">
+                    <BookOpen className="w-5 h-5 text-secondary-400" />
+                    <div>
+                      <p className="text-sm text-secondary-600">Materias Asignadas</p>
+                      <p className="font-medium">{user.materias_asignadas || 0}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card.Content>
+    </Card>
+  );
+
+  const renderEstudianteView = () => (
+    <Card>
+      <Card.Header>
+        <div className="flex justify-between items-center">
+          <div>
+            <Card.Title>Información del Estudiante</Card.Title>
+            <Card.Description>Gestiona tu información académica y personal</Card.Description>
+          </div>
+          <div className="flex space-x-2">
+            {!isEditing ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<Edit />}
+                  onClick={handleEdit}
+                >
+                  Editar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowChangePassword(true)}
+                >
+                  Cambiar Contraseña
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<X />}
+                  onClick={handleCancel}
+                  disabled={isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  icon={<Save />}
+                  onClick={handleSave}
+                  loading={isLoading}
+                  disabled={isLoading}
+                >
+                  Guardar
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </Card.Header>
+
+      <Card.Content>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="md:col-span-2">
+            {renderUserAvatar()}
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-lg border border-secondary-100">
+              <h3 className="text-lg font-medium text-secondary-900 mb-4">Información Personal</h3>
+              {renderPersonalInfo()}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-lg border border-secondary-100">
+              <h3 className="text-lg font-medium text-secondary-900 mb-4">Información de Contacto</h3>
+              {renderContactInfo()}
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <div className="bg-white p-6 rounded-lg border border-secondary-100">
+              <h3 className="text-lg font-medium text-secondary-900 mb-4">Información Académica</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+                  <div className="flex items-center space-x-3">
+                    <GraduationCap className="w-5 h-5 text-secondary-400" />
+                    <div>
+                      <p className="text-sm text-secondary-600">Mención</p>
+                      <p className="font-medium">{user.mencion_nombre || 'No asignada'}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+                  <div className="flex items-center space-x-3">
+                    <BookOpen className="w-5 h-5 text-secondary-400" />
+                    <div>
+                      <p className="text-sm text-secondary-600">Estado Académico</p>
+                      <p className="font-medium">{user.estado_academico || 'No definido'}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 bg-secondary-50 rounded-lg border border-secondary-100">
+                  <div className="flex items-center space-x-3">
+                    <Calendar className="w-5 h-5 text-secondary-400" />
+                    <div>
+                      <p className="text-sm text-secondary-600">Fecha de Ingreso</p>
+                      <p className="font-medium">
+                        {user.fecha_ingreso
+                          ? helpers.formatDate(user.fecha_ingreso, 'long')
+                          : 'No registrada'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card.Content>
+    </Card>
+  );
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Mensajes de estado */}
       {error && (
         <Alert variant="error" dismissible onDismiss={() => setError('')}>
           {error}
@@ -141,206 +549,8 @@ const ProfileView = () => {
         </Alert>
       )}
 
-      {/* Información del perfil */}
-      <Card>
-        <Card.Header>
-          <div className="flex justify-between items-center">
-            <div>
-              <Card.Title>Mi Perfil</Card.Title>
-              <Card.Description>
-                Información personal y de contacto
-              </Card.Description>
-            </div>
-            
-            <div className="flex space-x-2">
-              {!isEditing ? (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    icon={<Edit />}
-                    onClick={handleEdit}
-                  >
-                    Editar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowChangePassword(true)}
-                  >
-                    Cambiar Contraseña
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    icon={<X />}
-                    onClick={handleCancel}
-                    disabled={isLoading}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    size="sm"
-                    icon={<Save />}
-                    onClick={handleSave}
-                    loading={isLoading}
-                    disabled={isLoading}
-                  >
-                    Guardar
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </Card.Header>
+      {isAdmin ? renderAdminView() : isDocente ? renderDocenteView() : renderEstudianteView()}
 
-        <Card.Content>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Avatar y información básica */}
-            <div className="flex flex-col items-center space-y-4 md:col-span-2">
-              <div className={`w-24 h-24 rounded-full flex items-center justify-center text-white text-2xl font-bold ${helpers.getAvatarColor(user.nombre + ' ' + user.apellido)}`}>
-                {helpers.getInitials(user.nombre + ' ' + user.apellido)}
-              </div>
-              
-              <div className="text-center">
-                <h2 className="text-xl font-semibold text-secondary-900">
-                  {user.nombre} {user.apellido}
-                </h2>
-                <p className="text-secondary-600">
-                  {getRoleDisplayName(user.roles)}
-                </p>
-              </div>
-            </div>
-
-            {/* Información de contacto */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-secondary-900">Información Personal</h3>
-              
-              {isEditing ? (
-                <>
-                  <Input
-                    label="Nombre"
-                    name="nombre"
-                    value={formData.nombre}
-                    onChange={handleChange}
-                    icon={<User />}
-                    error={getFieldError('nombre')}
-                    required
-                  />
-                  
-                  <Input
-                    label="Apellido"
-                    name="apellido"
-                    value={formData.apellido}
-                    onChange={handleChange}
-                    icon={<User />}
-                    error={getFieldError('apellido')}
-                    required
-                  />
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center space-x-3">
-                    <User className="w-5 h-5 text-secondary-400" />
-                    <div>
-                      <p className="text-sm text-secondary-600">Nombre completo</p>
-                      <p className="font-medium">{user.nombre} {user.apellido}</p>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div className="flex items-center space-x-3">
-                <Mail className="w-5 h-5 text-secondary-400" />
-                <div>
-                  <p className="text-sm text-secondary-600">Correo electrónico</p>
-                  <p className="font-medium">{user.correo}</p>
-                </div>
-              </div>
-
-              {user.ci && (
-                <div className="flex items-center space-x-3">
-                  <div className="w-5 h-5 flex items-center justify-center">
-                    <span className="text-xs font-bold text-secondary-400">CI</span>
-                  </div>
-                  <div>
-                    <p className="text-sm text-secondary-600">Cédula de Identidad</p>
-                    <p className="font-medium">{user.ci}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Información adicional */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-secondary-900">Información de Contacto</h3>
-              
-              {isEditing ? (
-                <>
-                  <Input
-                    label="Teléfono"
-                    name="telefono"
-                    value={formData.telefono}
-                    onChange={handleChange}
-                    icon={<Phone />}
-                    error={getFieldError('telefono')}
-                    placeholder="70123456"
-                  />
-                  
-                  <Input
-                    label="Dirección"
-                    name="direccion"
-                    value={formData.direccion}
-                    onChange={handleChange}
-                    icon={<MapPin />}
-                    placeholder="Tu dirección completa"
-                  />
-                </>
-              ) : (
-                <>
-                  {user.telefono && (
-                    <div className="flex items-center space-x-3">
-                      <Phone className="w-5 h-5 text-secondary-400" />
-                      <div>
-                        <p className="text-sm text-secondary-600">Teléfono</p>
-                        <p className="font-medium">{user.telefono}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {user.direccion && (
-                    <div className="flex items-center space-x-3">
-                      <MapPin className="w-5 h-5 text-secondary-400" />
-                      <div>
-                        <p className="text-sm text-secondary-600">Dirección</p>
-                        <p className="font-medium">{user.direccion}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {user.fecha_nacimiento && (
-                    <div className="flex items-center space-x-3">
-                      <Calendar className="w-5 h-5 text-secondary-400" />
-                      <div>
-                        <p className="text-sm text-secondary-600">Fecha de nacimiento</p>
-                        <p className="font-medium">
-                          {helpers.formatDate(user.fecha_nacimiento, 'long')}
-                          {' '}({helpers.calculateAge(user.fecha_nacimiento)} años)
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </Card.Content>
-      </Card>
-
-      {/* Modal para cambiar contraseña */}
       <Modal
         isOpen={showChangePassword}
         onClose={() => setShowChangePassword(false)}

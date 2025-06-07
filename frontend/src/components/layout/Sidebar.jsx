@@ -218,12 +218,13 @@ const Sidebar = ({ isOpen, onClose }) => {
     }
 
     // Configuración - común para todos
-    items.push({
-      name: 'Configuración',
-      href: '/settings',
-      icon: Settings,
-      roles: ['administrador', 'docente', 'estudiante']
-    });
+    // Removed Configuración item as per request
+    // items.push({
+    //   name: 'Configuración',
+    //   href: '/settings',
+    //   icon: Settings,
+    //   roles: ['administrador', 'docente', 'estudiante']
+    // });
 
     return items.filter(item => 
       item.roles.some(role => userRoles.includes(role))

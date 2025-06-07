@@ -221,6 +221,7 @@ export const dataService = {
   tiposEvaluacion: {
     // Operaciones CRUD básicas
     obtenerPorMateria: (idMateria, parametros = {}) => api.get(`/tipos-evaluacion/materia/${idMateria}`, { params: parametros }),
+    obtenerTodos: (idMateria, parametros = {}) => api.get(`/tipos-evaluacion/materia/${idMateria}`, { params: parametros }), // Alias para compatibilidad
     obtenerPorId: (idMateria, idTipoEvaluacion) => api.get(`/tipos-evaluacion/materia/${idMateria}/${idTipoEvaluacion}`),
     crear: (idMateria, datos) => api.post(`/tipos-evaluacion/materia/${idMateria}`, datos),
     actualizar: (idMateria, idTipoEvaluacion, datos) => api.put(`/tipos-evaluacion/materia/${idMateria}/${idTipoEvaluacion}`, datos),

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
   BookOpen, 
@@ -40,22 +41,44 @@ const DashboardPage = () => {
 
       if (isAdmin) {
         // Cargar estadísticas para administrador
-        const [estudiantes, docentes, materias, inscripciones] = await Promise.all([
+        const [auditoria, estudiantes, docentes, materias, inscripciones] = await Promise.all([
+          dataService.auditoria.obtenerLogs({ limit: 5 }),
           dataService.estudiantes.obtenerEstadisticas(),
           dataService.docentes.obtenerEstadisticas(),
           dataService.materias.obtenerEstadisticas(),
           dataService.inscripciones.obtenerEstadisticas()
         ]);
+        console.log(auditoria)
+        // Map audit entries to activity objects with improved messages
+        const filteredActividadReciente = (auditoria.data || [])
+          .map(item => {
+            let mensaje;
+            if (item.accion === 'LOGIN') {
+              mensaje = `Inicio de sesión: ${item.usuario_nombre || 'Usuario'}`;
+            } else if (item.accion === 'LOGOUT') {
+              mensaje = `Cierre de sesión: ${item.usuario_nombre || 'Usuario'}`;
+            } else {
+              mensaje = `${item.accion} en ${item.tabla_afectada}`;
+            }
+            return {
+              id: item.id_auditoria,
+              mensaje,
+              fecha: item.fecha_accion,
+              tipo: item.accion === 'LOGIN' || item.accion === 'LOGOUT' ? 'auth' : 'actividad'
+            };
+          });
+        console.log('Filtered recent activity:', filteredActividadReciente);
 
         dashboardData = {
-          totalEstudiantes: estudiantes.data?.total || 0,
-          estudiantesActivos: estudiantes.data?.activos || 0,
-          totalDocentes: docentes.data?.total || 0,
-          docentesActivos: docentes.data?.activos || 0,
-          totalMaterias: materias.data?.total || 0,
-          materiasActivas: materias.data?.activas || 0,
-          totalInscripciones: inscripciones.data?.total || 0,
-          inscripcionesActivas: inscripciones.data?.activas || 0
+          totalEstudiantes: estudiantes.data?.resumen?.total_estudiantes || 0,
+          estudiantesActivos: estudiantes.data?.resumen?.activos || 0,
+          totalDocentes: docentes.data?.resumen?.total_docentes || 0,
+          docentesActivos: docentes.data?.resumen?.activos || 0,
+          totalMaterias: materias.data?.resumen?.total_materias || 0,
+          materiasActivas: materias.data?.resumen?.activas || 0,
+          totalInscripciones: inscripciones.data?.resumen?.total_inscripciones || 0,
+          inscripcionesActivas: inscripciones.data?.resumen?.inscritos || 0,
+          actividadReciente: filteredActividadReciente
         };
       } else if (isTeacher) {
         // Cargar datos para docente
@@ -120,7 +143,7 @@ const DashboardPage = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">
-              {getGreeting()}, {user?.nombre}!
+              {getGreeting()}, {isAdmin ? 'Administrador' : user?.nombre}!
             </h1>
             <p className="text-primary-100 mt-1">
               Bienvenido al Sistema Académico - {getRoleDisplayName()}
@@ -163,38 +186,52 @@ const DashboardPage = () => {
 
 // Dashboard para Administrador
 const AdminDashboard = ({ stats }) => {
+  const navigate = useNavigate();
+
+  const formatearTiempoRelativo = (fecha) => {
+    const ahora = new Date();
+    const diferencia = ahora - fecha;
+    const minutos = Math.floor(diferencia / (1000 * 60));
+    const horas = Math.floor(diferencia / (1000 * 60 * 60));
+    const dias = Math.floor(diferencia / (1000 * 60 * 60 * 24));
+
+    if (minutos < 60) {
+      return `hace ${minutos} minuto${minutos !== 1 ? 's' : ''}`;
+    } else if (horas < 24) {
+      return `hace ${horas} hora${horas !== 1 ? 's' : ''}`;
+    } else {
+      return `hace ${dias} día${dias !== 1 ? 's' : ''}`;
+    }
+  };
+
   const statsCards = [
     {
       title: 'Estudiantes',
       value: stats.totalEstudiantes,
       subtitle: `${stats.estudiantesActivos} activos`,
       icon: Users,
-      color: 'bg-blue-500',
-      trend: '+12%'
+      color: 'bg-blue-500'
     },
     {
       title: 'Docentes',
       value: stats.totalDocentes,
       subtitle: `${stats.docentesActivos} activos`,
       icon: GraduationCap,
-      color: 'bg-green-500',
-      trend: '+5%'
+      color: 'bg-green-500'
     },
     {
       title: 'Materias',
       value: stats.totalMaterias,
       subtitle: `${stats.materiasActivas} activas`,
       icon: BookOpen,
-      color: 'bg-purple-500',
-      trend: '+8%'
+      color: 'bg-purple-500'
     },
     {
       title: 'Inscripciones',
       value: stats.totalInscripciones,
       subtitle: `${stats.inscripcionesActivas} activas`,
       icon: FileText,
-      color: 'bg-orange-500',
-      trend: '+15%'
+      color: 'bg-orange-500'
     }
   ];
 
@@ -220,11 +257,6 @@ const AdminDashboard = ({ stats }) => {
                   <stat.icon className="w-6 h-6 text-white" />
                 </div>
               </div>
-              <div className="mt-4 flex items-center">
-                <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                <span className="text-sm text-green-600">{stat.trend}</span>
-                <span className="text-sm text-secondary-500 ml-1">vs mes anterior</span>
-              </div>
             </Card.Content>
           </Card>
         ))}
@@ -232,55 +264,131 @@ const AdminDashboard = ({ stats }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <Card.Header>
-            <Card.Title>Actividad Reciente</Card.Title>
+          <Card.Header className="flex justify-between items-center">
+            <Card.Title>
+              <div className="flex items-center space-x-2">
+                <Calendar className="w-5 h-5 text-primary-500" />
+                <span>Actividad Reciente</span>
+              </div>
+            </Card.Title>
+            <span className="text-xs text-secondary-500">
+              Últimas {stats.actividadReciente?.length || 0} actividades
+            </span>
           </Card.Header>
-          <Card.Content>
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <p className="text-sm text-secondary-600">
-                  Nuevo estudiante registrado - Juan Pérez
-                </p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <p className="text-sm text-secondary-600">
-                  Materia "Cálculo I" actualizada
-                </p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                <p className="text-sm text-secondary-600">
-                  Reporte mensual generado
-                </p>
-              </div>
+          <Card.Content className="p-0">
+            <div className="divide-y divide-secondary-100">
+              {stats.actividadReciente && stats.actividadReciente.length > 0 ? (
+                stats.actividadReciente.map((actividad, index) => (
+                  <div 
+                    key={actividad.id ?? index} 
+                    className="flex items-center p-4 hover:bg-secondary-50 transition-colors"
+                  >
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${
+                      actividad.tipo === 'estudiante' ? 'bg-blue-500' :
+                      actividad.tipo === 'materia' ? 'bg-green-500' :
+                      actividad.tipo === 'inscripcion' ? 'bg-purple-500' :
+                      actividad.tipo === 'auth' ? 'bg-yellow-500' :
+                      'bg-gray-500'
+                    }`}></div>
+                    <div className="ml-3 flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-secondary-900">
+                          {actividad.mensaje}
+                        </p>
+                        <span className="text-xs text-secondary-500 whitespace-nowrap ml-4">
+                          {helpers.formatDateTime(actividad.fecha)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                  <p className="text-sm text-secondary-600">
+                    No hay actividad reciente registrada
+                  </p>
+                </div>
+              )}
             </div>
           </Card.Content>
         </Card>
 
         <Card>
-          <Card.Header>
-            <Card.Title>Acciones Rápidas</Card.Title>
+          <Card.Header className="flex justify-between items-center">
+            <Card.Title>
+              <div className="flex items-center space-x-2">
+                <BarChart className="w-5 h-5 text-primary-500" />
+                <span>Acciones Rápidas</span>
+              </div>
+            </Card.Title>
           </Card.Header>
-          <Card.Content>
-            <div className="grid grid-cols-2 gap-4">
-              <button className="p-4 border border-secondary-200 rounded-lg hover:bg-secondary-50 text-left">
-                <Users className="w-6 h-6 text-blue-500 mb-2" />
-                <p className="text-sm font-medium">Gestionar Estudiantes</p>
-              </button>
-              <button className="p-4 border border-secondary-200 rounded-lg hover:bg-secondary-50 text-left">
-                <BookOpen className="w-6 h-6 text-green-500 mb-2" />
-                <p className="text-sm font-medium">Gestionar Materias</p>
-              </button>
-              <button className="p-4 border border-secondary-200 rounded-lg hover:bg-secondary-50 text-left">
-                <BarChart className="w-6 h-6 text-purple-500 mb-2" />
-                <p className="text-sm font-medium">Ver Reportes</p>
-              </button>
-              <button className="p-4 border border-secondary-200 rounded-lg hover:bg-secondary-50 text-left">
-                <Calendar className="w-6 h-6 text-orange-500 mb-2" />
-                <p className="text-sm font-medium">Programar Eventos</p>
-              </button>
+          <Card.Content className="p-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                {
+                  title: 'Gestionar Estudiantes',
+                  icon: Users,
+                  color: 'blue',
+                  path: '/estudiantes'
+                },
+                {
+                  title: 'Gestionar Materias',
+                  icon: BookOpen,
+                  color: 'green',
+                  path: '/materias'
+                },
+                {
+                  title: 'Ver Reportes',
+                  icon: BarChart,
+                  color: 'purple',
+                  path: '/reportes'
+                },
+                {
+                  title: 'Gestionar Inscripciones',
+                  icon: FileText,
+                  color: 'orange',
+                  path: '/inscripciones'
+                }
+              ].map((action, index) => (
+                <button 
+                  key={index}
+                  onClick={() => navigate(action.path)}
+                  className={`flex flex-col items-center justify-center p-4 rounded-xl shadow-sm border focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-${
+                    action.color === 'blue' ? 'blue' :
+                    action.color === 'green' ? 'green' :
+                    action.color === 'purple' ? 'purple' :
+                    'orange'
+                  }-500 active:scale-95 ${
+                    action.color === 'blue' ? 'bg-blue-50 hover:bg-blue-100 border-blue-200' :
+                    action.color === 'green' ? 'bg-green-50 hover:bg-green-100 border-green-200' :
+                    action.color === 'purple' ? 'bg-purple-50 hover:bg-purple-100 border-purple-200' :
+                    'bg-orange-50 hover:bg-orange-100 border-orange-200'
+                  } transition-all duration-200 group`}
+                >
+                  <div className={`p-3 rounded-lg mb-3 ${
+                    action.color === 'blue' ? 'bg-blue-100 group-hover:bg-blue-200' :
+                    action.color === 'green' ? 'bg-green-100 group-hover:bg-green-200' :
+                    action.color === 'purple' ? 'bg-purple-100 group-hover:bg-purple-200' :
+                    'bg-orange-100 group-hover:bg-orange-200'
+                  }`}>
+                    <action.icon className={`w-6 h-6 ${
+                      action.color === 'blue' ? 'text-blue-600' :
+                      action.color === 'green' ? 'text-green-600' :
+                      action.color === 'purple' ? 'text-purple-600' :
+                      'text-orange-600'
+                    }`} />
+                  </div>
+                  <p className={`text-sm font-medium text-center ${
+                    action.color === 'blue' ? 'text-blue-700' :
+                    action.color === 'green' ? 'text-green-700' :
+                    action.color === 'purple' ? 'text-purple-700' :
+                    'text-orange-700'
+                  }`}>
+                    {action.title}
+                  </p>
+                </button>
+              ))}
             </div>
           </Card.Content>
         </Card>

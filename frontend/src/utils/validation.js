@@ -163,7 +163,7 @@ export const useFormValidation = (rules = {}) => {
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
 
-  const validateField = useCallback((fieldName, value) => {
+  const validateField = useCallback((fieldName, value, showError = true) => {
     const fieldRules = rules[fieldName] || [];
     let error = null;
 
@@ -172,15 +172,17 @@ export const useFormValidation = (rules = {}) => {
       if (error) break;
     }
 
-    setErrors(prev => ({
-      ...prev,
-      [fieldName]: error
-    }));
+    if (showError) {
+      setErrors(prev => ({
+        ...prev,
+        [fieldName]: error
+      }));
 
-    setTouched(prev => ({
-      ...prev,
-      [fieldName]: true
-    }));
+      setTouched(prev => ({
+        ...prev,
+        [fieldName]: true
+      }));
+    }
 
     return !error;
   }, [rules]);
@@ -189,6 +191,7 @@ export const useFormValidation = (rules = {}) => {
     const newErrors = {};
     let isValid = true;
 
+    // Validar todos los campos y mostrar errores inmediatamente
     Object.keys(rules).forEach(fieldName => {
       const fieldRules = rules[fieldName] || [];
       const value = data[fieldName];
@@ -196,22 +199,20 @@ export const useFormValidation = (rules = {}) => {
 
       for (const rule of fieldRules) {
         error = rule(value);
-        if (error) break;
-      }
-
-      if (error) {
-        newErrors[fieldName] = error;
-        isValid = false;
+        if (error) {
+          newErrors[fieldName] = error;
+          isValid = false;
+          break;
+        }
       }
     });
 
+    // Actualizar errores y marcar todos los campos como tocados
     setErrors(newErrors);
-    
-    // Marcar todos los campos como tocados
-    const allTouched = {};
-    Object.keys(rules).forEach(fieldName => {
-      allTouched[fieldName] = true;
-    });
+    const allTouched = Object.keys(rules).reduce((acc, fieldName) => {
+      acc[fieldName] = true;
+      return acc;
+    }, {});
     setTouched(allTouched);
 
     return isValid;
@@ -228,18 +229,24 @@ export const useFormValidation = (rules = {}) => {
       delete newErrors[fieldName];
       return newErrors;
     });
+    setTouched(prev => {
+      const newTouched = { ...prev };
+      delete newTouched[fieldName];
+      return newTouched;
+    });
   }, []);
 
+  // Modificado para mostrar errores inmediatamente después de validate()
   const getFieldError = useCallback((fieldName) => {
-    return touched[fieldName] ? errors[fieldName] : null;
-  }, [errors, touched]);
+    return errors[fieldName] || null;
+  }, [errors]);
 
   const hasFieldError = useCallback((fieldName) => {
-    return touched[fieldName] && !!errors[fieldName];
-  }, [errors, touched]);
+    return !!errors[fieldName];
+  }, [errors]);
 
   const hasErrors = useCallback(() => {
-    return Object.keys(errors).some(key => errors[key]);
+    return Object.keys(errors).length > 0;
   }, [errors]);
 
   return {
@@ -276,7 +283,7 @@ export class FormValidator {
     this.touched = {};
   }
 
-  validateField(fieldName, value) {
+  validateField(fieldName, value, showError = true) {
     const fieldRules = this.rules[fieldName] || [];
     let error = null;
 
@@ -285,8 +292,10 @@ export class FormValidator {
       if (error) break;
     }
 
-    this.errors[fieldName] = error;
-    this.touched[fieldName] = true;
+    if (showError) {
+      this.errors[fieldName] = error;
+      this.touched[fieldName] = true;
+    }
 
     return !error;
   }
@@ -302,12 +311,11 @@ export class FormValidator {
 
       for (const rule of fieldRules) {
         error = rule(value);
-        if (error) break;
-      }
-
-      if (error) {
-        newErrors[fieldName] = error;
-        isValid = false;
+        if (error) {
+          newErrors[fieldName] = error;
+          isValid = false;
+          break;
+        }
       }
     });
 
@@ -322,15 +330,15 @@ export class FormValidator {
   }
 
   getFieldError(fieldName) {
-    return this.touched[fieldName] ? this.errors[fieldName] : null;
+    return this.errors[fieldName] || null;
   }
 
   hasFieldError(fieldName) {
-    return this.touched[fieldName] && !!this.errors[fieldName];
+    return !!this.errors[fieldName];
   }
 
   hasErrors() {
-    return Object.keys(this.errors).some(key => this.errors[key]);
+    return Object.keys(this.errors).length > 0;
   }
 
   clearErrors() {
@@ -340,6 +348,7 @@ export class FormValidator {
 
   clearFieldError(fieldName) {
     delete this.errors[fieldName];
+    delete this.touched[fieldName];
   }
 }
 

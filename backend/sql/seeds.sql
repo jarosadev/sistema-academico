@@ -25,7 +25,7 @@ INSERT INTO roles (nombre, descripcion, permisos) VALUES
 -- Insertar usuario administrador por defecto
 -- Contraseña: Admin123! (hasheada con bcrypt)
 INSERT INTO usuarios (correo, password) VALUES
-('admin@umsa.edu.bo', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBdXfs2Stk5v96');
+('admin@umsa.edu.bo', '$2a$12$RZBE4T/zPX5OjeePXX3TXeJYBRm4N7wd2Q8.sfBQ8KlxQ4H.3b20C');
 
 -- Asignar rol de administrador al usuario admin
 INSERT INTO usuario_roles (id_usuario, id_rol) VALUES

@@ -236,13 +236,6 @@ function App() {
                 } 
               />
 
-              {/* Configuración - accesible para todos */}
-              <Route 
-                path="settings" 
-                element={
-                  <div>Configuración del Sistema (En desarrollo)</div>
-                } 
-              />
 
               {/* Redirección por defecto al dashboard */}
               <Route path="" element={<Navigate to="/dashboard" replace />} />

@@ -18,6 +18,7 @@ const Header = ({ onMenuToggle, isMobileMenuOpen }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
+
   const handleLogout = async () => {
     await logout();
   };
@@ -25,13 +26,30 @@ const Header = ({ onMenuToggle, isMobileMenuOpen }) => {
   const getRoleDisplayName = (roles) => {
     if (!roles || roles.length === 0) return 'Usuario';
     
+    // Check if user is admin
+    const isAdmin = roles.some(role => role.nombre === 'administrador');
+    if (isAdmin) {
+      return 'Admin';
+    }
+    
     const roleNames = {
-      administrador: 'Administrador',
       docente: 'Docente',
       estudiante: 'Estudiante'
     };
     
     return roles.map(role => roleNames[role.nombre] || role.nombre).join(', ');
+  };
+
+  const getDisplayInitials = (user) => {
+    if (!user) return '';
+    
+    // For admin users, just return "A"
+    if (user.roles && user.roles.some(role => role.nombre === 'administrador')) {
+      return 'A';
+    }
+    
+    // For other users, return initials
+    return helpers.getInitials(user.nombre + ' ' + user.apellido);
   };
 
   return (
@@ -70,34 +88,7 @@ const Header = ({ onMenuToggle, isMobileMenuOpen }) => {
 
           {/* Navegación del usuario */}
           <div className="flex items-center space-x-4">
-            {/* Notificaciones */}
-            <div className="relative">
-              <button
-                type="button"
-                className="p-2 text-secondary-600 hover:text-secondary-900 hover:bg-secondary-100 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500"
-                onClick={() => setShowNotifications(!showNotifications)}
-              >
-                <Bell className="w-5 h-5" />
-                {/* Badge de notificaciones */}
-                <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-400 ring-2 ring-white"></span>
-              </button>
-
-              {/* Dropdown de notificaciones */}
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
-                  <div className="p-4">
-                    <h3 className="text-sm font-medium text-secondary-900 mb-3">
-                      Notificaciones
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="text-sm text-secondary-600 text-center py-4">
-                        No hay notificaciones nuevas
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+           
 
             {/* Menú de usuario */}
             <div className="relative">
@@ -107,7 +98,7 @@ const Header = ({ onMenuToggle, isMobileMenuOpen }) => {
                 onClick={() => setShowUserMenu(!showUserMenu)}
               >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium ${helpers.getAvatarColor(user?.nombre + ' ' + user?.apellido)}`}>
-                  {helpers.getInitials(user?.nombre + ' ' + user?.apellido)}
+                  {getDisplayInitials(user)}
                 </div>
                 
                 <div className="hidden md:block text-left">
@@ -148,14 +139,6 @@ const Header = ({ onMenuToggle, isMobileMenuOpen }) => {
                       Mi Perfil
                     </Link>
 
-                    <Link
-                      to="/settings"
-                      className="flex items-center px-4 py-2 text-sm text-secondary-700 hover:bg-secondary-100"
-                      onClick={() => setShowUserMenu(false)}
-                    >
-                      <Settings className="w-4 h-4 mr-3" />
-                      Configuración
-                    </Link>
 
                     <div className="border-t border-secondary-200">
                       <button

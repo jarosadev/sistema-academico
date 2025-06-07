@@ -82,28 +82,35 @@ export const AuthProvider = ({ children }) => {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          const response = await authService.verifyToken();
-          if (response.success) {
-            dispatch({
-              type: 'LOGIN_SUCCESS',
-              payload: {
-                user: response.data.usuario,
-                token: token
-              }
-            });
-            // toast.success('Sesión iniciada correctamente');
+          // Verificar token primero
+          const verifyResponse = await authService.verifyToken();
+          if (verifyResponse.success) {
+            // Si el token es válido, obtener el perfil detallado
+            const profileResponse = await authService.getProfile();
+            if (profileResponse.success) {
+              dispatch({
+                type: 'LOGIN_SUCCESS',
+                payload: {
+                  user: {
+                    ...verifyResponse.data.usuario,
+                    ...profileResponse.data.usuario
+                  },
+                  token: token
+                }
+              });
+            } else {
+              throw new Error('Error al obtener el perfil');
+            }
           } else {
-            localStorage.removeItem('token');
-            dispatch({ type: 'LOGOUT' });
-            toast.error('Sesión expirada. Por favor, inicie sesión nuevamente.', { 
-              duration: 8000, 
-              action: <button>Cerrar</button> 
-            });
+            throw new Error('Token inválido');
           }
         } catch (error) {
           localStorage.removeItem('token');
           dispatch({ type: 'LOGOUT' });
-          toast.error('Sesión expirada. Por favor, inicie sesión nuevamente.');
+          toast.error('Sesión expirada. Por favor, inicie sesión nuevamente.', { 
+            duration: 8000, 
+            action: <button>Cerrar</button> 
+          });
         }
       } else {
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -140,15 +147,20 @@ export const AuthProvider = ({ children }) => {
       if (response.success) {
         const { tokens, usuario } = response.data;
         localStorage.setItem('token', tokens.access_token);
-        dispatch({
-          type: 'LOGIN_SUCCESS',
-          payload: {
-            user: usuario,
-            token: tokens.access_token
-          }
-        });
-        toast.success('Inicio de sesión exitoso');
-        return { success: true };
+        
+        // Get full profile data immediately after login
+        const profileResponse = await authService.getProfile();
+        if (profileResponse.success) {
+          dispatch({
+            type: 'LOGIN_SUCCESS',
+            payload: {
+              user: { ...usuario, ...profileResponse.data.usuario },
+              token: tokens.access_token
+            }
+          });
+          toast.success('Inicio de sesión exitoso');
+          return { success: true };
+        }
       } else {
         dispatch({
           type: 'LOGIN_FAILURE',
@@ -213,10 +225,15 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authService.updateProfile(profileData);
       if (response.success) {
-        dispatch({
-          type: 'UPDATE_USER',
-          payload: response.data
-        });
+        // Obtener el perfil actualizado después de la actualización
+        const profileResponse = await authService.getProfile();
+        if (profileResponse.success) {
+          dispatch({
+            type: 'UPDATE_USER',
+            payload: profileResponse.data.usuario
+          });
+          return { success: true, data: profileResponse.data.usuario };
+        }
       }
       return response;
     } catch (error) {

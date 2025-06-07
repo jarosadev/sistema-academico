@@ -312,10 +312,61 @@ const getProfile = asyncHandler(async (req, res) => {
         );
     }
 
+    let profileData = user.toJSON();
+    const userRole = user.roles.length > 0 ? user.roles[0].nombre : null;
+
+    // Obtener datos específicos según el rol
+    if (userRole === 'estudiante') {
+        const query = `
+            SELECT 
+                e.id_estudiante,
+                e.nombre,
+                e.apellido,
+                e.ci,
+                e.fecha_nacimiento,
+                e.direccion,
+                e.telefono,
+                e.estado_academico,
+                e.fecha_ingreso,
+                m.nombre as mencion_nombre,
+                m.id_mencion
+            FROM estudiantes e
+            LEFT JOIN menciones m ON e.id_mencion = m.id_mencion
+            WHERE e.id_usuario = ?
+        `;
+        const [estudiante] = await executeQuery(query, [user.id_usuario]);
+        if (estudiante) {
+            profileData = { ...profileData, ...estudiante };
+        }
+    } 
+    else if (userRole === 'docente') {
+        const query = `
+            SELECT 
+                d.id_docente,
+                d.nombre,
+                d.apellido,
+                d.ci,
+                d.especialidad,
+                d.telefono,
+                d.activo,
+                d.fecha_contratacion,
+                COUNT(DISTINCT dm.id_materia) as materias_asignadas
+            FROM docentes d
+            LEFT JOIN docente_materias dm ON d.id_docente = dm.id_docente
+            WHERE d.id_usuario = ?
+            GROUP BY d.id_docente
+        `;
+        const [docente] = await executeQuery(query, [user.id_usuario]);
+        if (docente) {
+            profileData = { ...profileData, ...docente };
+        }
+    }
+    // Para el rol admin, usar los datos básicos del usuario
+
     res.json({
         success: true,
         data: {
-            usuario: user.toJSON()
+            usuario: profileData
         }
     });
 });

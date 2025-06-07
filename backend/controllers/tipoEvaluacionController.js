@@ -57,7 +57,7 @@ class TipoEvaluacionController {
 
             // Validar que la suma de porcentajes no exceda 100%
             const porcentajesActuales = await executeQuery(
-                'SELECT SUM(porcentaje) as total FROM tipos_evaluacion WHERE id_materia = ? AND activo = true',
+                'SELECT SUM(porcentaje) as total FROM tipos_evaluacion WHERE id_materia = ? AND activo = 1',
                 [id_materia]
             );
 
@@ -114,12 +114,12 @@ class TipoEvaluacionController {
                 throw createError('Tipo de evaluación no encontrado', 404);
             }
 
-            // Validar porcentaje total si se está actualizando el porcentaje
-            if (porcentaje !== undefined) {
-                const porcentajesActuales = await executeQuery(
-                    'SELECT SUM(porcentaje) as total FROM tipos_evaluacion WHERE id_materia = ? AND id_tipo_evaluacion != ? AND activo = true',
-                    [id_materia, id_tipo_evaluacion]
-                );
+                // Validar porcentaje total si se está actualizando el porcentaje
+                if (porcentaje !== undefined) {
+                    const porcentajesActuales = await executeQuery(
+                        'SELECT SUM(porcentaje) as total FROM tipos_evaluacion WHERE id_materia = ? AND id_tipo_evaluacion != ? AND activo = 1',
+                        [id_materia, id_tipo_evaluacion]
+                    );
 
                 const totalActual = porcentajesActuales[0].total || 0;
                 if (totalActual + parseFloat(porcentaje) > 100) {
@@ -202,7 +202,7 @@ class TipoEvaluacionController {
             if (notasAsociadas[0].count > 0) {
                 // Soft delete
                 await executeQuery(
-                    'UPDATE tipos_evaluacion SET activo = false WHERE id_tipo_evaluacion = ?',
+                    'UPDATE tipos_evaluacion SET activo = 0 WHERE id_tipo_evaluacion = ?',
                     [id_tipo_evaluacion]
                 );
             } else {

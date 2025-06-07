@@ -577,21 +577,48 @@ class EstudianteController {
 
         return notasConPromedios;
     }
-}
 
-const controller = new EstudianteController();
+    async obtenerPerfil(req, res, next) {
+        try {
+            const id_usuario = req.user.id_usuario;
 
-module.exports = {
-    listarEstudiantes: controller.listarEstudiantes.bind(controller),
-    obtenerEstudiante: controller.obtenerEstudiante.bind(controller),
-    crearEstudiante: controller.crearEstudiante.bind(controller),
-    actualizarEstudiante: controller.actualizarEstudiante.bind(controller),
-    eliminarEstudiante: controller.eliminarEstudiante.bind(controller),
-    obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
-    obtenerHistorialAcademico: controller.obtenerHistorialAcademico.bind(controller),
-    obtenerNotasPorEstudiante: controller.obtenerNotasPorEstudiante.bind(controller),
-    // Funciones adicionales que faltan en las rutas
-    obtenerInscripcionesPorEstudiante: async (req, res, next) => {
+            const query = `
+                SELECT 
+                    e.id_estudiante,
+                    e.nombre,
+                    e.apellido,
+                    e.ci,
+                    e.fecha_nacimiento,
+                    e.direccion,
+                    e.telefono,
+                    e.estado_academico,
+                    e.fecha_ingreso,
+                    m.nombre as mencion_nombre,
+                    m.id_mencion,
+                    u.correo,
+                    u.ultimo_acceso
+                FROM estudiantes e
+                LEFT JOIN menciones m ON e.id_mencion = m.id_mencion
+                LEFT JOIN usuarios u ON e.id_usuario = u.id_usuario
+                WHERE e.id_usuario = ?
+            `;
+
+            const estudiantes = await executeQuery(query, [id_usuario]);
+
+            if (estudiantes.length === 0) {
+                throw createError('Perfil de estudiante no encontrado', 404);
+            }
+
+            res.json({
+                success: true,
+                data: estudiantes[0]
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+    async obtenerInscripcionesPorEstudiante(req, res, next) {
         try {
             const { id } = req.params;
             const query = `
@@ -609,7 +636,22 @@ module.exports = {
         } catch (error) {
             next(error);
         }
-    },
+    }
+}
+
+const controller = new EstudianteController();
+
+module.exports = {
+    listarEstudiantes: controller.listarEstudiantes.bind(controller),
+    obtenerEstudiante: controller.obtenerEstudiante.bind(controller),
+    crearEstudiante: controller.crearEstudiante.bind(controller),
+    actualizarEstudiante: controller.actualizarEstudiante.bind(controller),
+    eliminarEstudiante: controller.eliminarEstudiante.bind(controller),
+    obtenerEstadisticas: controller.obtenerEstadisticas.bind(controller),
+    obtenerHistorialAcademico: controller.obtenerHistorialAcademico.bind(controller),
+    obtenerNotasPorEstudiante: controller.obtenerNotasPorEstudiante.bind(controller),
+    obtenerPerfil: controller.obtenerPerfil.bind(controller),
+    obtenerInscripcionesPorEstudiante: controller.obtenerInscripcionesPorEstudiante.bind(controller),
 
     obtenerEstudiantesPorMencion: async (req, res, next) => {
         try {
@@ -629,6 +671,8 @@ module.exports = {
             next(error);
         }
     },
+
+
     importarEstudiantes: async (req, res, next) => {
         try {
             res.json({

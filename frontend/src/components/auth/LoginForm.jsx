@@ -15,7 +15,7 @@ const LoginForm = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
 
-  const { validator, validateField, validate, getFieldError, hasFieldError } = useFormValidation({
+  const { validateField, validate, getFieldError } = useFormValidation({
     correo: [commonRules.required, commonRules.email],
     password: [commonRules.required]
   });
@@ -27,10 +27,9 @@ const LoginForm = () => {
       [name]: value
     }));
     
-    // Validar campo en tiempo real
-    validateField(name, value);
+    // Validar campo en tiempo real y mostrar error inmediatamente
+    validateField(name, value, true);
     
-    // Limpiar error cuando se modifica un campo
     if (error) {
       clearError();
     }
@@ -39,16 +38,19 @@ const LoginForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Validar todos los campos y mostrar errores inmediatamente
     if (!validate(formData)) {
+      // Forzar la validación de todos los campos
+      Object.keys(formData).forEach(fieldName => {
+        validateField(fieldName, formData[fieldName], true);
+      });
       return;
     }
 
     const result = await login(formData);
     
     if (!result.success) {
-      // El error ya se maneja en el contexto y se muestra en el alert
       console.error('Error de login:', result.message);
-      // No limpiar el error hasta que el usuario modifique un campo o envíe de nuevo
     }
   };
 
@@ -68,13 +70,14 @@ const LoginForm = () => {
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6" noValidate>
           <Input
             label="Correo Electrónico"
             type="email"
             name="correo"
             value={formData.correo}
             onChange={handleChange}
+            onBlur={(e) => validateField('correo', e.target.value, true)}
             placeholder="tu.correo@umsa.edu.bo"
             icon={<Mail />}
             error={getFieldError('correo')}
@@ -88,6 +91,7 @@ const LoginForm = () => {
               name="password"
               value={formData.password}
               onChange={handleChange}
+              onBlur={(e) => validateField('password', e.target.value, true)}
               placeholder="Ingresa tu contraseña"
               icon={<Lock />}
               error={getFieldError('password')}
@@ -107,29 +111,7 @@ const LoginForm = () => {
             </button>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-secondary-300 rounded"
-              />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-secondary-900">
-                Recordarme
-              </label>
-            </div>
-
-            <div className="text-sm">
-              <Link
-                to="/forgot-password"
-                className="font-medium text-primary-600 hover:text-primary-500"
-              >
-                ¿Olvidaste tu contraseña?
-              </Link>
-            </div>
-          </div>
-
+         
           <Button
             type="submit"
             className="w-full"
